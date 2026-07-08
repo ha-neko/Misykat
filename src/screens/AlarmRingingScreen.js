@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
+import * as Notifications from 'expo-notifications';
 import AppLogo from '../components/AppLogo';
 import { getAudioForContent } from '../utils/audioSources';
 import { getCachedAudio } from '../utils/cacheManager';
@@ -24,6 +25,7 @@ export default function AlarmRingingScreen({ route, navigation }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    Notifications.dismissAllNotificationsAsync().catch(() => {});
     loadContent();
     startPulse();
     return () => {
@@ -151,7 +153,7 @@ export default function AlarmRingingScreen({ route, navigation }) {
     <SafeAreaView style={s.container}>
       <View style={s.content}>
         <Animated.View style={[s.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
-          <AppLogo size={100} color={colors.accent} />
+          <AppLogo size={72} color={colors.accent} />
         </Animated.View>
 
         <Text style={s.alarmTitle}>

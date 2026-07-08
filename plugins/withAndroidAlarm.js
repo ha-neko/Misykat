@@ -6,6 +6,10 @@ function addPermissions(manifest) {
     'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.USE_EXACT_ALARM',
     'android.permission.SCHEDULE_EXACT_ALARM',
+    'android.permission.USE_FULL_SCREEN_INTENT',
+    'android.permission.FOREGROUND_SERVICE',
+    'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+    'android.permission.POST_NOTIFICATIONS',
   ];
 
   if (!manifest['manifest']) manifest['manifest'] = {};
@@ -35,6 +39,8 @@ function setActivityAttributes(manifest) {
       activity.$['android:showOnLockScreen'] = 'true';
       activity.$['android:turnScreenOn'] = 'true';
       activity.$['android:showWhenLocked'] = 'true';
+      activity.$['android:showForAllUsers'] = 'true';
+      activity.$['android:excludeFromRecents'] = 'false';
     }
   }
 

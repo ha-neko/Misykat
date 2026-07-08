@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 const ALARMS_KEY = 'alarms';
 const PRAYER_ALARMS_KEY = 'prayerAlarms';
@@ -26,12 +26,22 @@ async function setupChannel() {
       enableLights: true,
       lightColor: '#00b894',
       showBadge: true,
+      sound: 'default',
     });
   }
 }
 
 export async function requestPermissions() {
   await setupChannel();
+
+  if (Platform.OS === 'android' && Platform.Version >= 33) {
+    try {
+      await PermissionsAndroid.request('android.permission.USE_FULL_SCREEN_INTENT');
+      await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS');
+      await PermissionsAndroid.request('android.permission.SCHEDULE_EXACT_ALARM');
+    } catch {}
+  }
+
   const { status } = await Notifications.requestPermissionsAsync({
     ios: {
       allowAlert: true,
@@ -57,6 +67,7 @@ export async function scheduleAlarm(alarmData) {
       priority: Notifications.AndroidNotificationPriority.HIGH,
       channelId: 'alarm',
       categoryIdentifier: 'alarm',
+      sound: 'default',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -164,6 +175,7 @@ export async function toggleAlarm(id) {
         priority: Notifications.AndroidNotificationPriority.HIGH,
         channelId: 'alarm',
         categoryIdentifier: 'alarm',
+        sound: 'default',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
