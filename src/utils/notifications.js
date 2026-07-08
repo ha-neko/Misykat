@@ -27,6 +27,7 @@ async function setupChannel() {
       lightColor: '#00b894',
       showBadge: true,
       sound: 'default',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
 }
