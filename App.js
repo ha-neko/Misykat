@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import AddAlarmScreen from './src/screens/AddAlarmScreen';
 import PrayerTimesScreen from './src/screens/PrayerTimesScreen';
@@ -26,6 +26,7 @@ function AddAlarmWrapper({ navigation, route }) {
 function TabNavigator() {
   const { colors } = useTheme();
   const { t } = useLocale();
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -34,8 +35,8 @@ function TabNavigator() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 65,
-          paddingBottom: 10,
+          height: 65 + insets.bottom,
+          paddingBottom: insets.bottom + 10,
           paddingTop: 6,
           elevation: 8,
           shadowColor: '#000',
