@@ -10,6 +10,7 @@ import AddAlarmScreen from './src/screens/AddAlarmScreen';
 import PrayerTimesScreen from './src/screens/PrayerTimesScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import PermissionScreen from './src/screens/PermissionScreen';
 import { requestPermissions } from './src/utils/notifications';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
@@ -87,6 +88,7 @@ function AppInner() {
   const { colors, isDark } = useTheme();
   const navigationRef = useRef(null);
   const [navReady, setNavReady] = useState(false);
+  const [permDone, setPermDone] = useState(false);
   const pendingAlarm = useRef(null);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ function AppInner() {
       }),
     });
 
-    requestPermissions();
+    if (permDone) requestPermissions();
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
@@ -149,7 +151,15 @@ function AppInner() {
       });
       pendingAlarm.current = null;
     }
-  }, [navReady]);
+  }, [navReady, permDone]);
+
+  if (!permDone) {
+    return (
+      <SafeAreaProvider>
+        <PermissionScreen onDone={() => setPermDone(true)} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <NavigationContainer
