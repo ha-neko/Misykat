@@ -134,13 +134,6 @@ function patchMainApplicationIfExists(projectRoot) {
     return null;
   }
 
-  const mainApp = findFile(javaRoot, 'MainApplication.kt') || findFile(javaRoot, 'MainApplication.java');
-  if (mainApp) {
-    patchMainApplication(mainApp);
-  } else {
-    console.log('MainApplication not found — native module unavailable');
-  }
-
   const mainAct = findFile(javaRoot, 'MainActivity.kt') || findFile(javaRoot, 'MainActivity.java');
   if (mainAct) {
     patchMainActivity(mainAct);

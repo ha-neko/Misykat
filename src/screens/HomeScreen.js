@@ -96,12 +96,12 @@ export default function HomeScreen({ navigation }) {
           <Text style={s.greeting}>{t('greeting')}{username ? `, ${username}` : ''}</Text>
           <Text style={s.title}>Misykat</Text>
         </View>
-        <AppLogo size={20} color={colors.accent} />
+        <AppLogo size={24} color={colors.accent} />
       </View>
 
       {alarms.length === 0 ? (
         <View style={s.empty}>
-          <AppLogo size={32} color={colors.border} />
+          <AppLogo size={40} color={colors.border} />
           <Text style={s.emptyTitle}>{t('noAlarm')}</Text>
           <Text style={s.emptyHint}>{t('noAlarmHint')}</Text>
         </View>

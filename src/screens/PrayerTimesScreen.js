@@ -101,7 +101,7 @@ export default function PrayerTimesScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={s.header}>
           <Text style={s.title}>{t('prayerTimes')}</Text>
-          <AppLogo size={18} color={colors.accent} />
+          <AppLogo size={22} color={colors.accent} />
         </View>
 
         {next && (
