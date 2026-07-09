@@ -115,7 +115,7 @@ export default function PermissionScreen({ onDone }) {
     <SafeAreaView style={s.container}>
       <View style={s.content}>
         <View style={s.logoWrap}>
-          <AppLogo size={72} color={colors.accent} />
+          <AppLogo size={56} color={colors.accent} />
         </View>
 
         <Text style={s.title}>Misykat</Text>
