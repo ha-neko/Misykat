@@ -12,6 +12,7 @@ import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PermissionScreen from './src/screens/PermissionScreen';
 import { requestPermissions } from './src/utils/notifications';
+import { getInitialAlarmData } from './src/utils/nativeAlarm';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider, useLocale } from './src/i18n/LanguageContext';
@@ -104,6 +105,12 @@ function AppInner() {
     });
 
     if (permDone) requestPermissions();
+
+    getInitialAlarmData().then((data) => {
+      if (data && data.fromAlarm) {
+        pendingAlarm.current = data;
+      }
+    });
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {

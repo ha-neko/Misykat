@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, PermissionsAndroid } from 'react-native';
+import { scheduleNativeAlarm, cancelNativeAlarm } from './nativeAlarm';
 
 const ALARMS_KEY = 'alarms';
 const PRAYER_ALARMS_KEY = 'prayerAlarms';
@@ -76,6 +77,8 @@ export async function scheduleAlarm(alarmData) {
       minute,
     },
   });
+
+  await scheduleNativeAlarm(hour, minute, notificationId, contentType, false);
 
   const alarm = {
     id: notificationId,
@@ -154,6 +157,7 @@ export async function getPrayerAlarms() {
 
 export async function deleteAlarm(id) {
   await Notifications.cancelScheduledNotificationAsync(id);
+  await cancelNativeAlarm(id);
   const alarms = (await getAlarms()).filter((a) => a.id !== id);
   await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(alarms));
   return alarms;
@@ -168,7 +172,7 @@ export async function toggleAlarm(id) {
 
   if (alarm.enabled) {
     const { hour, minute, label, contentType } = alarm;
-    await Notifications.scheduleNotificationAsync({
+    const nid = await Notifications.scheduleNotificationAsync({
       content: {
         title: label || 'Misykat',
         body: 'Waktunya bangun!',
@@ -184,8 +188,10 @@ export async function toggleAlarm(id) {
         minute,
       },
     });
+    await scheduleNativeAlarm(hour, minute, alarm.id, contentType, false);
   } else {
     await Notifications.cancelScheduledNotificationAsync(id);
+    await cancelNativeAlarm(alarm.id);
   }
 
   await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(alarms));
