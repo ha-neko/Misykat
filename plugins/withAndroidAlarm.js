@@ -1,11 +1,14 @@
-const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
+const { withAndroidManifest, withDangerousMod, withMainApplication } = require('@expo/config-plugins');
 const path = require('path');
 const fs = require('fs');
 
 const PACKAGE_PATH = ['com', 'misykat', 'alarm'];
 const TARGET_DIR = (root) => path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_PATH);
 
-// --- Permissions ---
+// ===================================================================
+// AndroidManifest modifiers
+// ===================================================================
+
 function addPermissions(manifest) {
   const perms = [
     'android.permission.WAKE_LOCK',
@@ -19,30 +22,20 @@ function addPermissions(manifest) {
     'android.permission.SYSTEM_ALERT_WINDOW',
     'android.permission.EXPAND_STATUS_BAR',
   ];
-
   if (!manifest['manifest']) manifest['manifest'] = {};
   if (!manifest['manifest']['uses-permission']) manifest['manifest']['uses-permission'] = [];
-
-  const existing = manifest['manifest']['uses-permission'].map(
-    (p) => p['$']['android:name']
-  );
-
+  const existing = manifest['manifest']['uses-permission'].map((p) => p['$']['android:name']);
   for (const perm of perms) {
     if (!existing.includes(perm)) {
-      manifest['manifest']['uses-permission'].push({
-        $: { 'android:name': perm },
-      });
+      manifest['manifest']['uses-permission'].push({ $: { 'android:name': perm } });
     }
   }
-
   return manifest;
 }
 
-// --- Activity attributes ---
 function setActivityAttributes(manifest) {
   const app = manifest['manifest']['application'][0];
   if (!app['activity']) return manifest;
-
   for (const activity of app['activity']) {
     if (activity.$ && (activity.$['android:name'] === '.MainActivity' || activity.$['android:name'] === 'host.exp.exponent.MainActivity')) {
       activity.$['android:showOnLockScreen'] = 'true';
@@ -53,73 +46,84 @@ function setActivityAttributes(manifest) {
       activity.$['android:noHistory'] = 'false';
     }
   }
-
   return manifest;
 }
 
-// --- Register AlarmReceiver ---
 function addReceiver(manifest) {
   if (!manifest['manifest']['application']) return manifest;
   const app = manifest['manifest']['application'][0];
   if (!app['receiver']) app['receiver'] = [];
-
-  const receiverName = '.AlarmReceiver';
-  const alreadyExists = app['receiver'].some(
-    (r) => r.$ && r.$['android:name'] === receiverName
-  );
-  if (alreadyExists) return manifest;
-
+  const name = '.AlarmReceiver';
+  if (app['receiver'].some((r) => r.$ && r.$['android:name'] === name)) return manifest;
   app['receiver'].push({
-    $: {
-      'android:name': receiverName,
-      'android:exported': 'true',
-    },
-    'intent-filter': [
-      {
-        action: [
-          { $: { 'android:name': 'com.misykat.ALARM' } },
-          { $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } },
-        ],
-      },
-    ],
+    $: { 'android:name': name, 'android:exported': 'true' },
+    'intent-filter': [{
+      action: [
+        { $: { 'android:name': 'com.misykat.ALARM' } },
+        { $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } },
+      ],
+    }],
   });
-
   return manifest;
 }
 
-// --- Write native files ---
+// ===================================================================
+// Native file writer (AlarmReceiver.java + MisykatAlarmModule.java + MisykatAlarmPackage.java)
+// ===================================================================
+
 function writeNativeFiles(projectRoot) {
   const dir = TARGET_DIR(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
 
-  // AlarmReceiver.java
-  const receiverPath = path.join(dir, 'AlarmReceiver.java');
-  if (!fs.existsSync(receiverPath)) {
-    fs.writeFileSync(receiverPath, ALARM_RECEIVER_CODE, 'utf8');
-    console.log('Wrote AlarmReceiver.java');
-  }
+  const files = {
+    'AlarmReceiver.java': ALARM_RECEIVER_CODE,
+    'MisykatAlarmModule.java': MODULE_CODE,
+    'MisykatAlarmPackage.java': PACKAGE_CODE,
+  };
 
-  // MisykatAlarmModule.java
-  const modulePath = path.join(dir, 'MisykatAlarmModule.java');
-  if (!fs.existsSync(modulePath)) {
-    fs.writeFileSync(modulePath, MODULE_CODE, 'utf8');
-    console.log('Wrote MisykatAlarmModule.java');
+  for (const [name, code] of Object.entries(files)) {
+    const fp = path.join(dir, name);
+    if (!fs.existsSync(fp)) {
+      fs.writeFileSync(fp, code, 'utf8');
+      console.log('Wrote ' + name);
+    }
   }
-
-  // MisykatAlarmPackage.java
-  const pkgPath = path.join(dir, 'MisykatAlarmPackage.java');
-  if (!fs.existsSync(pkgPath)) {
-    fs.writeFileSync(pkgPath, PACKAGE_CODE, 'utf8');
-    console.log('Wrote MisykatAlarmPackage.java');
-  }
-
-  // Patch MainApplication.java to register our package
-  patchMainApplicationIfExists(projectRoot);
 }
 
-function patchMainApplicationIfExists(projectRoot) {
-  const javaRoot = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java');
+// ===================================================================
+// MainApplication.kt patcher (register MisykatAlarmPackage)
+// ===================================================================
 
+function patchMainApplication(contents, language) {
+  if (contents.includes('MisykatAlarmPackage')) return contents;
+  if (language === 'kt') {
+    contents = contents.replace(
+      /\nimport expo\./,
+      '\nimport com.misykat.alarm.MisykatAlarmPackage\nimport expo.'
+    );
+    contents = contents.replace(
+      /PackageList\(this\)\.packages\.apply \{/,
+      'PackageList(this).packages.apply {\n      add(MisykatAlarmPackage())'
+    );
+  } else if (language === 'java') {
+    contents = contents.replace(
+      /^import /m,
+      'import com.misykat.alarm.MisykatAlarmPackage;\nimport '
+    );
+    contents = contents.replace(
+      /return new PackageList\(this\)\.getPackages\(\);/,
+      'List<ReactPackage> packages = new PackageList(this).getPackages();\n    packages.add(new MisykatAlarmPackage());\n    return packages;'
+    );
+  }
+  return contents;
+}
+
+// ===================================================================
+// MainActivity.kt patcher (onNewIntent + setShowWhenLocked)
+// ===================================================================
+
+function patchMainActivity(projectRoot) {
+  const javaRoot = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java');
   function findFile(dir, name) {
     if (!fs.existsSync(dir)) return null;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -127,158 +131,37 @@ function patchMainApplicationIfExists(projectRoot) {
       if (e.isDirectory()) {
         const found = findFile(path.join(dir, e.name), name);
         if (found) return found;
-      } else if (e.name === name) {
-        return path.join(dir, e.name);
-      }
+      } else if (e.name === name) return path.join(dir, e.name);
     }
     return null;
   }
-
-  const mainAct = findFile(javaRoot, 'MainActivity.kt') || findFile(javaRoot, 'MainActivity.java');
-  if (mainAct) {
-    patchMainActivity(mainAct);
-  }
-}
-
-function patchMainApplication(filePath) {
-  const fileName = path.basename(filePath);
-  let content = fs.readFileSync(filePath, 'utf8');
+  const act = findFile(javaRoot, 'MainActivity.kt') || findFile(javaRoot, 'MainActivity.java');
+  if (!act) return;
+  let content = fs.readFileSync(act, 'utf8');
   const original = content;
-  const isKotlin = fileName.endsWith('.kt');
-
-  if (content.includes('MisykatAlarmPackage')) {
-    console.log('MainApplication already patched');
-    return;
-  }
-
-  if (isKotlin) {
-    // --- Kotlin patching ---
-    const importLine = 'import com.misykat.alarm.MisykatAlarmPackage';
-    const addLine = 'add(MisykatAlarmPackage())';
-
-    // Add import after existing imports
-    const lastImportIndex = content.lastIndexOf('\nimport ');
-    if (lastImportIndex !== -1) {
-      const newlineAfter = content.indexOf('\n', lastImportIndex + 1);
-      if (newlineAfter !== -1) {
-        content = content.slice(0, newlineAfter) + '\n' + importLine + content.slice(newlineAfter);
-      }
-    } else {
-      const pkgEnd = content.indexOf('\n', content.indexOf('package ') + 8);
-      if (pkgEnd !== -1) {
-        content = content.slice(0, pkgEnd) + '\n\n' + importLine + content.slice(pkgEnd);
-      }
-    }
-
-    // Add package registration in getPackages apply block
-    content = content.replace(
-      /packages\.apply\s*\{/,
-      match => match + '\n              ' + addLine
-    );
-  } else {
-    // --- Java patching ---
-    const importLine = '\nimport com.misykat.alarm.MisykatAlarmPackage;';
-    const pkgReg = "packages.add(new MisykatAlarmPackage());";
-
-    // Add import after the last existing import
-    const importRegex = /^import\s+.*;/gm;
-    let match;
-    let lastImportEnd = -1;
-    while ((match = importRegex.exec(content)) !== null) {
-      lastImportEnd = match.index + match[0].length;
-    }
-
-    if (lastImportEnd !== -1) {
-      content = content.slice(0, lastImportEnd) + importLine + content.slice(lastImportEnd);
-    } else {
-      content = content.replace(/^public class /m, importLine + '\n\npublic class ');
-    }
-
-    // Add package registration in getPackages method
-    const getPackagesMatch = content.match(/getPackages\(\)[^}]*\{([^}]*)\}/s);
-    if (getPackagesMatch) {
-      const methodBody = getPackagesMatch[1];
-      const lastAddMatch = methodBody.match(/packages\.add\([^)]+\)/g);
-      if (lastAddMatch) {
-        const lastAdd = lastAddMatch[lastAddMatch.length - 1];
-        content = content.replace(lastAdd, lastAdd + '\n      ' + pkgReg);
-      } else {
-        content = content.replace(
-          /getPackages\(\)\s*\{/,
-          match => match + '\n      ' + pkgReg
-        );
-      }
-    }
-  }
-
-  if (content !== original) {
-    fs.writeFileSync(filePath, content, 'utf8');
-    console.log('Patched ' + fileName);
-  }
-}
-
-function patchMainActivity(filePath) {
-  const fileName = path.basename(filePath);
-  let content = fs.readFileSync(filePath, 'utf8');
-  const original = content;
-  const isKotlin = fileName.endsWith('.kt');
-
-  if (content.includes('onNewIntent')) {
-    console.log('MainActivity already has onNewIntent');
-    return;
-  }
-
-  if (isKotlin) {
-    // Add Intent import if needed
+  if (content.includes('onNewIntent')) { console.log('MainActivity already patched'); return; }
+  if (act.endsWith('.kt')) {
     if (!content.includes('import android.content.Intent')) {
-      const importLine = '\nimport android.content.Intent';
-      const lastImportIdx = content.lastIndexOf('\nimport ');
-      if (lastImportIdx !== -1) {
-        const newlineAfter = content.indexOf('\n', lastImportIdx + 1);
-        if (newlineAfter !== -1) {
-          content = content.slice(0, newlineAfter) + importLine + content.slice(newlineAfter);
-        }
-      }
+      content = content.replace(/^import expo\./m, 'import android.content.Intent\nimport expo.');
     }
-    // Add onNewIntent override before createReactActivityDelegate
-    if (!content.includes('onNewIntent')) {
-      const override = `
-  override fun onNewIntent(intent: Intent) {
-    super.onNewIntent(intent)
-    setIntent(intent)
-  }`;
+    content = content.replace(
+      /override fun createReactActivityDelegate\(\)/,
+      `\n  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n    setIntent(intent)\n  }\n\n  override fun createReactActivityDelegate()`
+    );
+    const match = content.match(/override fun onCreate\(savedInstanceState: Bundle\?\)\s*\{[^}]*\}/s);
+    if (match && !match[0].includes('setShowWhenLocked')) {
       content = content.replace(
-        /override fun createReactActivityDelegate\(\)/,
-        override + '\n\n  ' + 'override fun createReactActivityDelegate()'
+        match[0],
+        match[0].replace(
+          /super\.onCreate\(null\)/,
+          `super.onCreate(null)\n    if (Build.VERSION.SDK_INT >= 27) {\n      setShowWhenLocked(true)\n      setTurnScreenOn(true)\n    } else {\n      @Suppress("DEPRECATION")\n      window.addFlags(\n        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or\n        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or\n        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON\n      )\n    }`
+        )
       );
-    }
-    // Add setShowWhenLocked + turnScreenOn + close system dialogs in onCreate
-    const onCreateBody = /override fun onCreate\(savedInstanceState: Bundle\?\)\s*\{[^}]*\}/s;
-    const onCreateMatch = content.match(onCreateBody);
-    if (onCreateMatch && !onCreateMatch[0].includes('setShowWhenLocked')) {
-      const lines = onCreateMatch[0];
-      const updated = lines.replace(
-        /super\.onCreate\(null\)/,
-        `super.onCreate(null)
-    if (Build.VERSION.SDK_INT >= 27) {
-      setShowWhenLocked(true)
-      setTurnScreenOn(true)
-    } else {
-      @Suppress("DEPRECATION")
-      window.addFlags(
-        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-      )
-    }`
-      );
-      content = content.replace(lines, updated);
     }
   }
-
   if (content !== original) {
-    fs.writeFileSync(filePath, content, 'utf8');
-    console.log('Patched ' + fileName);
+    fs.writeFileSync(act, content, 'utf8');
+    console.log('Patched MainActivity');
   }
 }
 
@@ -485,10 +368,19 @@ module.exports = function withAndroidAlarm(config) {
     return cfg;
   });
 
+  config = withMainApplication(config, (cfg) => {
+    cfg.modResults.contents = patchMainApplication(
+      cfg.modResults.contents,
+      cfg.modResults.language
+    );
+    return cfg;
+  });
+
   config = withDangerousMod(config, [
     'android',
     (cfg) => {
       writeNativeFiles(cfg.modRequest.projectRoot);
+      patchMainActivity(cfg.modRequest.projectRoot);
       return cfg;
     },
   ]);

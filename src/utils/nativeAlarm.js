@@ -1,11 +1,9 @@
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 const Native = NativeModules.MisykatAlarmModule;
 
 export async function scheduleNativeAlarm(hour, minute, alarmId, contentType, isPrayer = false) {
-  if (Platform.OS !== 'android' || !Native) {
-    return;
-  }
+  if (Platform.OS !== 'android' || !Native) return;
   try {
     return await Native.scheduleAlarm(hour, minute, alarmId, contentType || '', isPrayer);
   } catch (e) {
