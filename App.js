@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -145,9 +146,23 @@ function AppInner() {
       }
     });
 
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        getInitialAlarmData().then((data) => {
+          if (data && data.fromAlarm && navigationRef.current) {
+            navigationRef.current.navigate('AlarmRinging', {
+              contentType: data.contentType,
+              isPrayer: data.isPrayer,
+            });
+          }
+        });
+      }
+    });
+
     return () => {
       respSub.remove();
       receivedSub.remove();
+      appStateSub.remove();
     };
   }, [navReady]);
 

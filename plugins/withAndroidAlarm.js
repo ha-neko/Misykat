@@ -118,76 +118,157 @@ function writeNativeFiles(projectRoot) {
 }
 
 function patchMainApplicationIfExists(projectRoot) {
-  const searchPaths = [
-    path.join(projectRoot, 'android', 'app', 'src', 'main', 'java'),
-  ];
+  const javaRoot = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java');
 
-  function findFile(dir) {
+  function findFile(dir, name) {
     if (!fs.existsSync(dir)) return null;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const e of entries) {
       if (e.isDirectory()) {
-        const found = findFile(path.join(dir, e.name));
+        const found = findFile(path.join(dir, e.name), name);
         if (found) return found;
-      } else if (e.name === 'MainApplication.java') {
+      } else if (e.name === name) {
         return path.join(dir, e.name);
       }
     }
     return null;
   }
 
-  for (const p of searchPaths) {
-    const f = findFile(p);
-    if (f) {
-      patchMainApplication(f);
-      return;
-    }
+  const mainApp = findFile(javaRoot, 'MainApplication.kt') || findFile(javaRoot, 'MainApplication.java');
+  if (mainApp) {
+    patchMainApplication(mainApp);
+  } else {
+    console.log('MainApplication not found — native module unavailable');
   }
-  console.log('MainApplication.java not found yet — will skip patching (native module unavailable)');
+
+  const mainAct = findFile(javaRoot, 'MainActivity.kt') || findFile(javaRoot, 'MainActivity.java');
+  if (mainAct) {
+    patchMainActivity(mainAct);
+  }
 }
 
 function patchMainApplication(filePath) {
   const fileName = path.basename(filePath);
   let content = fs.readFileSync(filePath, 'utf8');
   const original = content;
-
-  const importLine = '\nimport com.misykat.alarm.MisykatAlarmPackage;';
-  const pkgReg = "packages.add(new MisykatAlarmPackage());";
+  const isKotlin = fileName.endsWith('.kt');
 
   if (content.includes('MisykatAlarmPackage')) {
     console.log('MainApplication already patched');
     return;
   }
 
-  // Add import after the last existing import
-  const importRegex = /^import\s+.*;/gm;
-  let match;
-  let lastImportEnd = -1;
-  while ((match = importRegex.exec(content)) !== null) {
-    lastImportEnd = match.index + match[0].length;
-  }
+  if (isKotlin) {
+    // --- Kotlin patching ---
+    const importLine = 'import com.misykat.alarm.MisykatAlarmPackage';
+    const addLine = 'add(MisykatAlarmPackage())';
 
-  if (lastImportEnd !== -1) {
-    content = content.slice(0, lastImportEnd) + importLine + content.slice(lastImportEnd);
-  } else {
-    // Fallback: add before class declaration
-    content = content.replace(/^public class /m, importLine + '\n\npublic class ');
-  }
-
-  // Add package registration in getPackages method
-  const getPackagesMatch = content.match(/getPackages\(\)[^}]*\{([^}]*)\}/s);
-  if (getPackagesMatch) {
-    const methodBody = getPackagesMatch[1];
-    const lastAddMatch = methodBody.match(/packages\.add\([^)]+\)/g);
-    if (lastAddMatch) {
-      const lastAdd = lastAddMatch[lastAddMatch.length - 1];
-      content = content.replace(lastAdd, lastAdd + '\n      ' + pkgReg);
+    // Add import after existing imports
+    const lastImportIndex = content.lastIndexOf('\nimport ');
+    if (lastImportIndex !== -1) {
+      const newlineAfter = content.indexOf('\n', lastImportIndex + 1);
+      if (newlineAfter !== -1) {
+        content = content.slice(0, newlineAfter) + '\n' + importLine + content.slice(newlineAfter);
+      }
     } else {
-      // No packages.add found, add after the opening brace of getPackages
+      const pkgEnd = content.indexOf('\n', content.indexOf('package ') + 8);
+      if (pkgEnd !== -1) {
+        content = content.slice(0, pkgEnd) + '\n\n' + importLine + content.slice(pkgEnd);
+      }
+    }
+
+    // Add package registration in getPackages apply block
+    content = content.replace(
+      /packages\.apply\s*\{/,
+      match => match + '\n              ' + addLine
+    );
+  } else {
+    // --- Java patching ---
+    const importLine = '\nimport com.misykat.alarm.MisykatAlarmPackage;';
+    const pkgReg = "packages.add(new MisykatAlarmPackage());";
+
+    // Add import after the last existing import
+    const importRegex = /^import\s+.*;/gm;
+    let match;
+    let lastImportEnd = -1;
+    while ((match = importRegex.exec(content)) !== null) {
+      lastImportEnd = match.index + match[0].length;
+    }
+
+    if (lastImportEnd !== -1) {
+      content = content.slice(0, lastImportEnd) + importLine + content.slice(lastImportEnd);
+    } else {
+      content = content.replace(/^public class /m, importLine + '\n\npublic class ');
+    }
+
+    // Add package registration in getPackages method
+    const getPackagesMatch = content.match(/getPackages\(\)[^}]*\{([^}]*)\}/s);
+    if (getPackagesMatch) {
+      const methodBody = getPackagesMatch[1];
+      const lastAddMatch = methodBody.match(/packages\.add\([^)]+\)/g);
+      if (lastAddMatch) {
+        const lastAdd = lastAddMatch[lastAddMatch.length - 1];
+        content = content.replace(lastAdd, lastAdd + '\n      ' + pkgReg);
+      } else {
+        content = content.replace(
+          /getPackages\(\)\s*\{/,
+          match => match + '\n      ' + pkgReg
+        );
+      }
+    }
+  }
+
+  if (content !== original) {
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log('Patched ' + fileName);
+  }
+}
+
+function patchMainActivity(filePath) {
+  const fileName = path.basename(filePath);
+  let content = fs.readFileSync(filePath, 'utf8');
+  const original = content;
+  const isKotlin = fileName.endsWith('.kt');
+
+  if (content.includes('onNewIntent')) {
+    console.log('MainActivity already has onNewIntent');
+    return;
+  }
+
+  if (isKotlin) {
+    // Add Intent import if needed
+    if (!content.includes('import android.content.Intent')) {
+      const importLine = '\nimport android.content.Intent';
+      const lastImportIdx = content.lastIndexOf('\nimport ');
+      if (lastImportIdx !== -1) {
+        const newlineAfter = content.indexOf('\n', lastImportIdx + 1);
+        if (newlineAfter !== -1) {
+          content = content.slice(0, newlineAfter) + importLine + content.slice(newlineAfter);
+        }
+      }
+    }
+    // Add onNewIntent override before createReactActivityDelegate
+    if (!content.includes('onNewIntent')) {
+      const override = `
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+  }`;
       content = content.replace(
-        /getPackages\(\)\s*\{/,
-        match => match + '\n      ' + pkgReg
+        /override fun createReactActivityDelegate\(\)/,
+        override + '\n\n  ' + 'override fun createReactActivityDelegate()'
       );
+    }
+    // Add setShowWhenLocked + turnScreenOn + close system dialogs in onCreate
+    const onCreateBody = /override fun onCreate\(savedInstanceState: Bundle\?\)\s*\{[^}]*\}/s;
+    const onCreateMatch = content.match(onCreateBody);
+    if (onCreateMatch && !onCreateMatch[0].includes('setShowWhenLocked')) {
+      const lines = onCreateMatch[0];
+      const updated = lines.replace(
+        /super\.onCreate\(null\)/,
+        'super.onCreate(null)\n    setShowWhenLocked(true)\n    setTurnScreenOn(true)\n    sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))'
+      );
+      content = content.replace(lines, updated);
     }
   }
 
@@ -223,24 +304,22 @@ public class AlarmReceiver extends BroadcastReceiver {
     );
     wl.acquire(10000);
 
-    Intent i = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-    if (i != null) {
-      i.addFlags(
-        Intent.FLAG_ACTIVITY_NEW_TASK |
-        Intent.FLAG_ACTIVITY_SINGLE_TOP |
-        Intent.FLAG_ACTIVITY_CLEAR_TOP |
-        Intent.FLAG_ACTIVITY_NO_USER_ACTION
-      );
+    Intent i = new Intent(context, MainActivity.class);
+    i.addFlags(
+      Intent.FLAG_ACTIVITY_NEW_TASK |
+      Intent.FLAG_ACTIVITY_SINGLE_TOP |
+      Intent.FLAG_ACTIVITY_CLEAR_TOP |
+      Intent.FLAG_ACTIVITY_NO_USER_ACTION
+    );
 
-      if (intent.hasExtra("contentType"))
-        i.putExtra("contentType", intent.getStringExtra("contentType"));
-      if (intent.hasExtra("alarmId"))
-        i.putExtra("alarmId", intent.getStringExtra("alarmId"));
-      i.putExtra("isPrayer", intent.getBooleanExtra("isPrayer", false));
-      i.putExtra("fromAlarmReceiver", true);
+    if (intent.hasExtra("contentType"))
+      i.putExtra("contentType", intent.getStringExtra("contentType"));
+    if (intent.hasExtra("alarmId"))
+      i.putExtra("alarmId", intent.getStringExtra("alarmId"));
+    i.putExtra("isPrayer", intent.getBooleanExtra("isPrayer", false));
+    i.putExtra("fromAlarmReceiver", true);
 
-      context.startActivity(i);
-    }
+    context.startActivity(i);
 
     try { if (wl.isHeld()) wl.release(); } catch (Exception ignored) {}
   }
@@ -270,29 +349,9 @@ import java.util.Calendar;
 public class MisykatAlarmModule extends ReactContextBaseJavaModule {
   private static final String TAG = "MisykatAlarmModule";
   private static final String ACTION_ALARM = "com.misykat.ALARM";
-  private static String sPendingAlarmId = "";
-  private static String sPendingContentType = "";
-  private static boolean sPendingIsPrayer = false;
-  private static boolean sHasPendingAlarm = false;
 
   MisykatAlarmModule(ReactApplicationContext context) {
     super(context);
-    checkForAlarmIntent(context);
-  }
-
-  private void checkForAlarmIntent(ReactApplicationContext context) {
-    try {
-      Activity activity = context.getCurrentActivity();
-      if (activity == null) return;
-      Intent intent = activity.getIntent();
-      if (intent != null && intent.getBooleanExtra("fromAlarmReceiver", false)) {
-        sPendingAlarmId = intent.getStringExtra("alarmId") != null ? intent.getStringExtra("alarmId") : "";
-        sPendingContentType = intent.getStringExtra("contentType") != null ? intent.getStringExtra("contentType") : "";
-        sPendingIsPrayer = intent.getBooleanExtra("isPrayer", false);
-        sHasPendingAlarm = true;
-        Log.d(TAG, "Found alarm intent: " + sPendingContentType);
-      }
-    } catch (Exception ignored) {}
   }
 
   @NonNull
@@ -303,14 +362,20 @@ public class MisykatAlarmModule extends ReactContextBaseJavaModule {
   public void getInitialAlarmData(Promise promise) {
     try {
       WritableMap result = Arguments.createMap();
-      result.putString("alarmId", sPendingAlarmId);
-      result.putString("contentType", sPendingContentType);
-      result.putBoolean("isPrayer", sPendingIsPrayer);
-      result.putBoolean("fromAlarm", sHasPendingAlarm);
-      sHasPendingAlarm = false;
-      sPendingAlarmId = "";
-      sPendingContentType = "";
-      sPendingIsPrayer = false;
+      Activity activity = getCurrentActivity();
+      if (activity != null) {
+        Intent intent = activity.getIntent();
+        if (intent != null && intent.getBooleanExtra("fromAlarmReceiver", false)) {
+          result.putString("alarmId", intent.getStringExtra("alarmId") != null ? intent.getStringExtra("alarmId") : "");
+          result.putString("contentType", intent.getStringExtra("contentType") != null ? intent.getStringExtra("contentType") : "");
+          result.putBoolean("isPrayer", intent.getBooleanExtra("isPrayer", false));
+          result.putBoolean("fromAlarm", true);
+          intent.removeExtra("fromAlarmReceiver");
+          promise.resolve(result);
+          return;
+        }
+      }
+      result.putBoolean("fromAlarm", false);
       promise.resolve(result);
     } catch (Exception e) {
       promise.reject("INIT_DATA_ERROR", e.getMessage(), e);

@@ -153,7 +153,7 @@ export default function AlarmRingingScreen({ route, navigation }) {
     <SafeAreaView style={s.container}>
       <View style={s.content}>
         <Animated.View style={[s.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
-          <AppLogo size={56} color={colors.accent} />
+          <AppLogo size={48} color={colors.accent} />
         </Animated.View>
 
         <Text style={s.alarmTitle}>
