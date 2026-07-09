@@ -266,7 +266,18 @@ function patchMainActivity(filePath) {
       const lines = onCreateMatch[0];
       const updated = lines.replace(
         /super\.onCreate\(null\)/,
-        'super.onCreate(null)\n    setShowWhenLocked(true)\n    setTurnScreenOn(true)\n    sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))'
+        `super.onCreate(null)
+    if (Build.VERSION.SDK_INT >= 27) {
+      setShowWhenLocked(true)
+      setTurnScreenOn(true)
+    } else {
+      @Suppress("DEPRECATION")
+      window.addFlags(
+        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+      )
+    }`
       );
       content = content.replace(lines, updated);
     }
