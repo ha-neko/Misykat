@@ -1,0 +1,8 @@
+{
+  "name": "misykat-alarm",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "expo-module": {
+    "platforms": ["android"]
+  }
+}

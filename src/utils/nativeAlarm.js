@@ -1,11 +1,17 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
-const Native = NativeModules.MisykatAlarmModule;
+const Native = requireOptionalNativeModule('MisykatAlarm');
 
 export async function scheduleNativeAlarm(hour, minute, alarmId, contentType, isPrayer = false) {
   if (Platform.OS !== 'android' || !Native) return;
   try {
-    return await Native.scheduleAlarm(hour, minute, alarmId, contentType || '', isPrayer);
+    const now = new Date();
+    const triggerTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
+    if (triggerTime.getTime() <= Date.now()) {
+      triggerTime.setDate(triggerTime.getDate() + 1);
+    }
+    return await Native.scheduleAlarm(alarmId, triggerTime.getTime(), contentType || '', isPrayer);
   } catch (e) {
     console.warn('Native alarm scheduling failed:', e.message);
   }

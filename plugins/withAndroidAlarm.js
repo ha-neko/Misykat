@@ -1,13 +1,9 @@
-const { withAndroidManifest, withDangerousMod, withMainApplication } = require('@expo/config-plugins');
+const { withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
 const path = require('path');
 const fs = require('fs');
 
 const PACKAGE_PATH = ['com', 'misykat', 'alarm'];
 const TARGET_DIR = (root) => path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_PATH);
-
-// ===================================================================
-// AndroidManifest modifiers
-// ===================================================================
 
 function addPermissions(manifest) {
   const perms = [
@@ -67,60 +63,15 @@ function addReceiver(manifest) {
   return manifest;
 }
 
-// ===================================================================
-// Native file writer (AlarmReceiver.java + MisykatAlarmModule.java + MisykatAlarmPackage.java)
-// ===================================================================
-
-function writeNativeFiles(projectRoot) {
+function writeAlarmReceiver(projectRoot) {
   const dir = TARGET_DIR(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
-
-  const files = {
-    'AlarmReceiver.java': ALARM_RECEIVER_CODE,
-    'MisykatAlarmModule.java': MODULE_CODE,
-    'MisykatAlarmPackage.java': PACKAGE_CODE,
-  };
-
-  for (const [name, code] of Object.entries(files)) {
-    const fp = path.join(dir, name);
-    if (!fs.existsSync(fp)) {
-      fs.writeFileSync(fp, code, 'utf8');
-      console.log('Wrote ' + name);
-    }
+  const fp = path.join(dir, 'AlarmReceiver.java');
+  if (!fs.existsSync(fp)) {
+    fs.writeFileSync(fp, ALARM_RECEIVER_CODE, 'utf8');
+    console.log('Wrote AlarmReceiver.java');
   }
 }
-
-// ===================================================================
-// MainApplication.kt patcher (register MisykatAlarmPackage)
-// ===================================================================
-
-function patchMainApplication(contents, language) {
-  if (contents.includes('MisykatAlarmPackage')) return contents;
-  if (language === 'kt') {
-    contents = contents.replace(
-      /\nimport expo\./,
-      '\nimport com.misykat.alarm.MisykatAlarmPackage\nimport expo.'
-    );
-    contents = contents.replace(
-      /PackageList\(this\)\.packages\.apply \{/,
-      'PackageList(this).packages.apply {\n      add(MisykatAlarmPackage())'
-    );
-  } else if (language === 'java') {
-    contents = contents.replace(
-      /^import /m,
-      'import com.misykat.alarm.MisykatAlarmPackage;\nimport '
-    );
-    contents = contents.replace(
-      /return new PackageList\(this\)\.getPackages\(\);/,
-      'List<ReactPackage> packages = new PackageList(this).getPackages();\n    packages.add(new MisykatAlarmPackage());\n    return packages;'
-    );
-  }
-  return contents;
-}
-
-// ===================================================================
-// MainActivity.kt patcher (onNewIntent + setShowWhenLocked)
-// ===================================================================
 
 function patchMainActivity(projectRoot) {
   const javaRoot = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java');
@@ -154,7 +105,7 @@ function patchMainActivity(projectRoot) {
         match[0],
         match[0].replace(
           /super\.onCreate\(null\)/,
-          `super.onCreate(null)\n    if (Build.VERSION.SDK_INT >= 27) {\n      setShowWhenLocked(true)\n      setTurnScreenOn(true)\n    } else {\n      @Suppress("DEPRECATION")\n      window.addFlags(\n        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or\n        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or\n        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON\n      )\n    }`
+          `super.onCreate(null)\n    if (Build.VERSION.SDK_INT >= 27) {\n      setShowWhenLocked(true)\n      setTurnScreenOn(true)\n    } else {\n      window.addFlags(\n        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or\n        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or\n        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON\n      )\n    }`
         )
       );
     }
@@ -164,10 +115,6 @@ function patchMainActivity(projectRoot) {
     console.log('Patched MainActivity');
   }
 }
-
-// ===================================================================
-// Java source code
-// ===================================================================
 
 const ALARM_RECEIVER_CODE = `package com.misykat.alarm;
 
@@ -199,10 +146,10 @@ public class AlarmReceiver extends BroadcastReceiver {
       Intent.FLAG_ACTIVITY_NO_USER_ACTION
     );
 
-    if (intent.hasExtra("contentType"))
-      i.putExtra("contentType", intent.getStringExtra("contentType"));
     if (intent.hasExtra("alarmId"))
       i.putExtra("alarmId", intent.getStringExtra("alarmId"));
+    if (intent.hasExtra("contentType"))
+      i.putExtra("contentType", intent.getStringExtra("contentType"));
     i.putExtra("isPrayer", intent.getBooleanExtra("isPrayer", false));
     i.putExtra("fromAlarmReceiver", true);
 
@@ -213,153 +160,6 @@ public class AlarmReceiver extends BroadcastReceiver {
 }
 `;
 
-const MODULE_CODE = `package com.misykat.alarm;
-
-import android.app.Activity;
-import android.app.AlarmManager;
-import android.app.PendingIntent;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import com.facebook.react.bridge.Arguments;
-import com.facebook.react.bridge.Promise;
-import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContextBaseJavaModule;
-import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.WritableMap;
-
-import java.util.Calendar;
-
-public class MisykatAlarmModule extends ReactContextBaseJavaModule {
-  private static final String TAG = "MisykatAlarmModule";
-  private static final String ACTION_ALARM = "com.misykat.ALARM";
-
-  MisykatAlarmModule(ReactApplicationContext context) {
-    super(context);
-  }
-
-  @NonNull
-  @Override
-  public String getName() { return "MisykatAlarmModule"; }
-
-  @ReactMethod
-  public void getInitialAlarmData(Promise promise) {
-    try {
-      WritableMap result = Arguments.createMap();
-      Activity activity = getCurrentActivity();
-      if (activity != null) {
-        Intent intent = activity.getIntent();
-        if (intent != null && intent.getBooleanExtra("fromAlarmReceiver", false)) {
-          result.putString("alarmId", intent.getStringExtra("alarmId") != null ? intent.getStringExtra("alarmId") : "");
-          result.putString("contentType", intent.getStringExtra("contentType") != null ? intent.getStringExtra("contentType") : "");
-          result.putBoolean("isPrayer", intent.getBooleanExtra("isPrayer", false));
-          result.putBoolean("fromAlarm", true);
-          intent.removeExtra("fromAlarmReceiver");
-          promise.resolve(result);
-          return;
-        }
-      }
-      result.putBoolean("fromAlarm", false);
-      promise.resolve(result);
-    } catch (Exception e) {
-      promise.reject("INIT_DATA_ERROR", e.getMessage(), e);
-    }
-  }
-
-  @ReactMethod
-  public void scheduleAlarm(int hour, int minute, String alarmId, String contentType, boolean isPrayer, Promise promise) {
-    try {
-      Context context = getReactApplicationContext();
-      AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-      if (am == null) { promise.reject("NO_ALARM_SERVICE", "AlarmManager not available"); return; }
-
-      Intent intent = new Intent(ACTION_ALARM);
-      intent.setPackage(context.getPackageName());
-      intent.putExtra("alarmId", alarmId);
-      intent.putExtra("contentType", contentType);
-      intent.putExtra("isPrayer", isPrayer);
-
-      int requestCode = alarmId.hashCode();
-      PendingIntent pi = PendingIntent.getBroadcast(context, requestCode, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-      Calendar cal = Calendar.getInstance();
-      cal.set(Calendar.HOUR_OF_DAY, hour);
-      cal.set(Calendar.MINUTE, minute);
-      cal.set(Calendar.SECOND, 0);
-      cal.set(Calendar.MILLISECOND, 0);
-      if (cal.getTimeInMillis() <= System.currentTimeMillis())
-        cal.add(Calendar.DAY_OF_MONTH, 1);
-
-      am.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
-        AlarmManager.INTERVAL_DAY, pi);
-
-      Log.d(TAG, "Scheduled alarm " + alarmId + " at " + hour + ":" + minute);
-      WritableMap result = Arguments.createMap();
-      result.putString("alarmId", alarmId);
-      result.putDouble("triggerAt", cal.getTimeInMillis());
-      promise.resolve(result);
-    } catch (Exception e) {
-      Log.e(TAG, "Failed to schedule alarm", e);
-      promise.reject("SCHEDULE_ERROR", e.getMessage(), e);
-    }
-  }
-
-  @ReactMethod
-  public void cancelAlarm(String alarmId, Promise promise) {
-    try {
-      Context context = getReactApplicationContext();
-      AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-      if (am == null) { promise.reject("NO_ALARM_SERVICE", "AlarmManager not available"); return; }
-
-      Intent intent = new Intent(ACTION_ALARM);
-      intent.setPackage(context.getPackageName());
-      int requestCode = alarmId.hashCode();
-      PendingIntent pi = PendingIntent.getBroadcast(context, requestCode, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-      am.cancel(pi);
-      pi.cancel();
-      Log.d(TAG, "Cancelled alarm " + alarmId);
-      promise.resolve(true);
-    } catch (Exception e) { promise.reject("CANCEL_ERROR", e.getMessage(), e); }
-  }
-
-  @ReactMethod
-  public void cancelAllAlarms(Promise promise) { promise.resolve(true); }
-}
-`;
-
-const PACKAGE_CODE = `package com.misykat.alarm;
-import androidx.annotation.NonNull;
-import com.facebook.react.ReactPackage;
-import com.facebook.react.bridge.NativeModule;
-import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.uimanager.ViewManager;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-public class MisykatAlarmPackage implements ReactPackage {
-  @NonNull @Override
-  public List<NativeModule> createNativeModules(@NonNull ReactApplicationContext rc) {
-    List<NativeModule> modules = new ArrayList<>();
-    modules.add(new MisykatAlarmModule(rc));
-    return modules;
-  }
-  @NonNull @Override
-  public List<ViewManager> createViewManagers(@NonNull ReactApplicationContext rc) {
-    return Collections.emptyList();
-  }
-}
-`;
-
-// ===================================================================
-// Plugin export
-// ===================================================================
-
 module.exports = function withAndroidAlarm(config) {
   config = withAndroidManifest(config, (cfg) => {
     cfg.modResults = addPermissions(cfg.modResults);
@@ -368,18 +168,10 @@ module.exports = function withAndroidAlarm(config) {
     return cfg;
   });
 
-  config = withMainApplication(config, (cfg) => {
-    cfg.modResults.contents = patchMainApplication(
-      cfg.modResults.contents,
-      cfg.modResults.language
-    );
-    return cfg;
-  });
-
   config = withDangerousMod(config, [
     'android',
     (cfg) => {
-      writeNativeFiles(cfg.modRequest.projectRoot);
+      writeAlarmReceiver(cfg.modRequest.projectRoot);
       patchMainActivity(cfg.modRequest.projectRoot);
       return cfg;
     },

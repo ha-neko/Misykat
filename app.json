@@ -15,9 +15,11 @@
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
+          "audio",
           "audio"
         ]
-      }
+      },
+      "bundleIdentifier": "com.misykat.alarm"
     },
     "android": {
       "package": "com.misykat.alarm",
