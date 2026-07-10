@@ -1,0 +1,29 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'com.misykat.alarm'
+version = '1.0.0'
+
+android {
+  namespace = 'com.misykat.alarm'
+  compileSdk = 34
+
+  defaultConfig {
+    minSdk = 23
+    targetSdk = 34
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+}

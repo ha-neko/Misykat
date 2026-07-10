@@ -40,3 +40,14 @@ export async function getInitialAlarmData() {
 export function isNativeAlarmAvailable() {
   return Platform.OS === 'android' && !!Native;
 }
+
+export async function checkPendingAlarm() {
+  if (Platform.OS !== 'android' || !Native) {
+    return { fromAlarm: false, alarmId: '', contentType: '', isPrayer: false };
+  }
+  try {
+    return await Native.checkPendingAlarm();
+  } catch {
+    return { fromAlarm: false, alarmId: '', contentType: '', isPrayer: false };
+  }
+}

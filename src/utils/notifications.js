@@ -61,27 +61,11 @@ export async function scheduleAlarm(alarmData) {
   const { hour, minute, label, type, contentType } = alarmData;
   await setupChannel();
 
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: label || 'Misykat',
-      body: 'Waktunya bangun!',
-      data: { alarmId: Date.now().toString(), contentType: contentType || null, isPrayer: false },
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-      channelId: 'alarm',
-      categoryIdentifier: 'alarm',
-      sound: 'default',
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-    },
-  });
-
-  await scheduleNativeAlarm(hour, minute, notificationId, contentType, false);
+  const alarmId = Date.now().toString();
+  await scheduleNativeAlarm(hour, minute, alarmId, contentType, false);
 
   const alarm = {
-    id: notificationId,
+    id: alarmId,
     hour,
     minute,
     label,
@@ -171,26 +155,9 @@ export async function toggleAlarm(id) {
   alarm.enabled = !alarm.enabled;
 
   if (alarm.enabled) {
-    const { hour, minute, label, contentType } = alarm;
-    const nid = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: label || 'Misykat',
-        body: 'Waktunya bangun!',
-        data: { alarmId: alarm.id, contentType: contentType || null, isPrayer: false },
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        channelId: 'alarm',
-        categoryIdentifier: 'alarm',
-        sound: 'default',
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour,
-        minute,
-      },
-    });
+    const { hour, minute, contentType } = alarm;
     await scheduleNativeAlarm(hour, minute, alarm.id, contentType, false);
   } else {
-    await Notifications.cancelScheduledNotificationAsync(id);
     await cancelNativeAlarm(alarm.id);
   }
 
@@ -199,7 +166,6 @@ export async function toggleAlarm(id) {
 }
 
 export async function cancelAllAlarms() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
   await AsyncStorage.removeItem(ALARMS_KEY);
   await AsyncStorage.removeItem(PRAYER_ALARMS_KEY);
 }

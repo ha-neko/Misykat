@@ -118,14 +118,21 @@ function patchMainActivity(projectRoot) {
 
 const ALARM_RECEIVER_CODE = `package com.misykat.alarm;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
 
 public class AlarmReceiver extends BroadcastReceiver {
   private static final String TAG = "MisykatAlarm";
+  private static final String CHANNEL_ID = "alarm";
+  private static final int NOTIFICATION_ID_BASE = 9001;
 
   @Override
   public void onReceive(Context context, Intent intent) {
@@ -138,24 +145,73 @@ public class AlarmReceiver extends BroadcastReceiver {
     );
     wl.acquire(10000);
 
-    Intent i = new Intent(context, MainActivity.class);
-    i.addFlags(
+    try {
+      String alarmId = intent.getStringExtra("alarmId");
+      String contentType = intent.getStringExtra("contentType");
+      boolean isPrayer = intent.getBooleanExtra("isPrayer", false);
+
+      MisykatAlarmModule.firePendingAlarm(alarmId, contentType, isPrayer);
+
+      showFullScreenNotification(context, alarmId, contentType, isPrayer);
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to process alarm", e);
+    } finally {
+      try { if (wl.isHeld()) wl.release(); } catch (Exception ignored) {}
+    }
+  }
+
+  private void showFullScreenNotification(Context context, String alarmId, String contentType, boolean isPrayer) {
+    NotificationManager notificationManager =
+      (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+    if (notificationManager == null) return;
+
+    ensureChannel(notificationManager);
+
+    Intent activityIntent = new Intent(context, MainActivity.class);
+    activityIntent.addFlags(
       Intent.FLAG_ACTIVITY_NEW_TASK |
       Intent.FLAG_ACTIVITY_SINGLE_TOP |
       Intent.FLAG_ACTIVITY_CLEAR_TOP |
       Intent.FLAG_ACTIVITY_NO_USER_ACTION
     );
+    if (alarmId != null) activityIntent.putExtra("alarmId", alarmId);
+    if (contentType != null) activityIntent.putExtra("contentType", contentType);
+    activityIntent.putExtra("isPrayer", isPrayer);
+    activityIntent.putExtra("fromAlarmReceiver", true);
 
-    if (intent.hasExtra("alarmId"))
-      i.putExtra("alarmId", intent.getStringExtra("alarmId"));
-    if (intent.hasExtra("contentType"))
-      i.putExtra("contentType", intent.getStringExtra("contentType"));
-    i.putExtra("isPrayer", intent.getBooleanExtra("isPrayer", false));
-    i.putExtra("fromAlarmReceiver", true);
+    int requestCode = alarmId != null ? alarmId.hashCode() : NOTIFICATION_ID_BASE;
+    PendingIntent fullScreenIntent = PendingIntent.getActivity(
+      context, requestCode, activityIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+    );
 
-    context.startActivity(i);
+    Notification notification = new Notification.Builder(context, CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+      .setContentTitle("Misykat")
+      .setContentText("Waktunya bangun!")
+      .setPriority(Notification.PRIORITY_MAX)
+      .setCategory(Notification.CATEGORY_ALARM)
+      .setFullScreenIntent(fullScreenIntent, true)
+      .setAutoCancel(true)
+      .setOngoing(false)
+      .build();
 
-    try { if (wl.isHeld()) wl.release(); } catch (Exception ignored) {}
+    notificationManager.notify(requestCode, notification);
+  }
+
+  private void ensureChannel(NotificationManager manager) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
+      if (channel == null) {
+        channel = new NotificationChannel(CHANNEL_ID, "Misykat", NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("Misykat alarm notifications");
+        channel.setBypassDnd(true);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        channel.enableVibration(true);
+        channel.setShowBadge(true);
+        manager.createNotificationChannel(channel);
+      }
+    }
   }
 }
 `;

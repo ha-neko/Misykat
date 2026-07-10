@@ -13,7 +13,7 @@ import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PermissionScreen from './src/screens/PermissionScreen';
 import { requestPermissions } from './src/utils/notifications';
-import { getInitialAlarmData } from './src/utils/nativeAlarm';
+import { getInitialAlarmData, checkPendingAlarm } from './src/utils/nativeAlarm';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider, useLocale } from './src/i18n/LanguageContext';
@@ -159,10 +159,24 @@ function AppInner() {
       }
     });
 
+    const pendingPoll = setInterval(() => {
+      if (navReady) {
+        checkPendingAlarm().then((data) => {
+          if (data && data.fromAlarm && navigationRef.current) {
+            navigationRef.current.navigate('AlarmRinging', {
+              contentType: data.contentType,
+              isPrayer: data.isPrayer,
+            });
+          }
+        });
+      }
+    }, 2000);
+
     return () => {
       respSub.remove();
       receivedSub.remove();
       appStateSub.remove();
+      clearInterval(pendingPoll);
     };
   }, [navReady]);
 
