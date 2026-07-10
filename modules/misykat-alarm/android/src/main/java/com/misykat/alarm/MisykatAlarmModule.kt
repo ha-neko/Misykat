@@ -76,8 +76,13 @@ class MisykatAlarmModule : Module() {
     )
 
     val alarmInfo = AlarmClockInfo(timeInMillis, null)
-    alarmManager.setAlarmClock(alarmInfo, pendingIntent)
-    Log.d(TAG, "Scheduled alarm $alarmId at $timeInMillis via setAlarmClock")
+    try {
+      alarmManager.setAlarmClock(alarmInfo, pendingIntent)
+      Log.d(TAG, "Scheduled alarm $alarmId at $timeInMillis via setAlarmClock")
+    } catch (e: SecurityException) {
+      Log.w(TAG, "setAlarmClock denied, falling back to setExactAndAllowWhileIdle", e)
+      alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeInMillis, pendingIntent)
+    }
   }
 
   private fun cancelAlarm(alarmId: String) {
@@ -120,7 +125,7 @@ class MisykatAlarmModule : Module() {
   }
 
   private fun canUseFullScreenIntent(): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+    if (Build.VERSION.SDK_INT < 29) return true
     val context = appContext.reactContext ?: return false
     val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
     return nm.canUseFullScreenIntent()
