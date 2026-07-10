@@ -117,6 +117,36 @@ function patchMainActivity(projectRoot) {
   }
 }
 
+function patchAppBuildGradle(projectRoot) {
+  const fp = path.join(projectRoot, 'android', 'app', 'build.gradle');
+  if (!fs.existsSync(fp)) return;
+  let content = fs.readFileSync(fp, 'utf8');
+  const original = content;
+
+  if (content.includes('splits {')) {
+    console.log('build.gradle already has splits');
+    return;
+  }
+
+  content = content.replace(
+    /android\s*\{/,
+    `android {
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk true
+        }
+    }`
+  );
+
+  if (content !== original) {
+    fs.writeFileSync(fp, content, 'utf8');
+    console.log('Patched build.gradle with ABI splits');
+  }
+}
+
 const ALARM_RECEIVER_CODE = `package com.misykat.alarm;
 
 import android.app.Notification;
@@ -277,6 +307,7 @@ module.exports = function withAndroidAlarm(config) {
     (cfg) => {
       writeAlarmReceiver(cfg.modRequest.projectRoot);
       patchMainActivity(cfg.modRequest.projectRoot);
+      patchAppBuildGradle(cfg.modRequest.projectRoot);
       return cfg;
     },
   ]);
