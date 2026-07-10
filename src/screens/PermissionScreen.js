@@ -8,7 +8,7 @@ import * as Notifications from 'expo-notifications';
 import * as Location from 'expo-location';
 import { useTheme } from '../theme/ThemeContext';
 import AppLogo from '../components/AppLogo';
-import { canUseFullScreenIntent, openFullScreenIntentSettings } from '../utils/nativeAlarm';
+import { canUseFullScreenIntent } from '../utils/nativeAlarm';
 
 const PERM_KEY = 'perm_granted';
 
@@ -29,13 +29,17 @@ const steps = [
     key: 'fsi',
     title: 'Izin Layar Penuh',
     desc: Platform.OS === 'android' && Platform.Version >= 34
-      ? 'Buka Settings > Izinkan "Full screen intent" untuk Misykat (Android 14+)'
+      ? 'Buka Settings > Apps > Misykat > Izinkan "Allow full screen intent"'
       : 'Agar alarm otomatis muncul tanpa perlu mengetuk notifikasi',
     request: async () => {
-      if (Platform.OS === 'android' && Platform.Version >= 33) {
-        const ok = await canUseFullScreenIntent();
+      if (Platform.OS === 'android' && Platform.Version >= 34) {
+        const ok = await canUseFullScreenIntent().catch(() => true);
         if (ok) return true;
-        await openFullScreenIntentSettings();
+        Alert.alert(
+          'Izin Layar Penuh',
+          '1. Buka Settings yang akan terbuka\n2. Cari "Allow full screen intent"\n3. Nyalakan toggle tersebut\n\nSetelah itu kembali ke sini dan tekan "Izinkan" lagi.',
+          [{ text: 'Buka Settings', onPress: () => Linking.openSettings() }]
+        );
         return false;
       }
       return true;

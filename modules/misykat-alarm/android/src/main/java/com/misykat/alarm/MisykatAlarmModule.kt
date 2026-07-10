@@ -125,19 +125,22 @@ class MisykatAlarmModule : Module() {
   }
 
   private fun canUseFullScreenIntent(): Boolean {
-    if (Build.VERSION.SDK_INT < 29) return true
-    val context = appContext.reactContext ?: return false
-    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
+    if (Build.VERSION.SDK_INT < 34) return true
+    val nm = appContext.reactContext?.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return true
     return nm.canUseFullScreenIntent()
   }
 
   private fun openFullScreenIntentSettings() {
-    val context = appContext.reactContext ?: return
-    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-      data = android.net.Uri.parse("package:${context.packageName}")
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (Build.VERSION.SDK_INT < 34) return
+    val activity = appContext.currentActivity ?: return
+    try {
+      val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+        data = android.net.Uri.parse("package:${activity.packageName}")
+      }
+      activity.startActivity(intent)
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to open FSI settings", e)
     }
-    context.startActivity(intent)
   }
 
   private fun checkPendingAlarm(): Map<String, Any?> {
