@@ -8,6 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './src/screens/HomeScreen';
 import AddAlarmScreen from './src/screens/AddAlarmScreen';
+import EditAlarmScreen from './src/screens/EditAlarmScreen';
 import PrayerTimesScreen from './src/screens/PrayerTimesScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -206,6 +207,7 @@ function AppInner() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         <RootStack.Screen name="Main" component={TabNavigator} />
+        <RootStack.Screen name="EditAlarm" component={EditAlarmScreen} />
         <RootStack.Screen
           name="AlarmRinging"
           component={AlarmRingingScreen}

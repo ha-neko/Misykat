@@ -88,7 +88,8 @@ export const id = {
   snooze: 'Tunda',
   dismiss: 'Matikan',
 
-  // Delete Alarm
+  // Edit/Delete Alarm
+  deleteAlarm: 'Hapus Alarm Ini',
   deleteTitle: 'Hapus Alarm',
   deleteConfirm: 'Yakin ingin menghapus alarm ini?',
 
@@ -182,6 +183,7 @@ export const en = {
   snooze: 'Snooze',
   dismiss: 'Dismiss',
 
+  deleteAlarm: 'Delete This Alarm',
   deleteTitle: 'Delete Alarm',
   deleteConfirm: 'Are you sure you want to delete this alarm?',
 

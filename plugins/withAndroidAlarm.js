@@ -186,8 +186,12 @@ public class AlarmReceiver extends BroadcastReceiver {
       String alarmId = intent.getStringExtra("alarmId");
       String contentType = intent.getStringExtra("contentType");
       boolean isPrayer = intent.getBooleanExtra("isPrayer", false);
+      int hour = intent.getIntExtra("hour", 7);
+      int minute = intent.getIntExtra("minute", 0);
 
       savePendingAlarm(context, alarmId, contentType, isPrayer);
+
+      rescheduleForTomorrow(context, alarmId, hour, minute, contentType, isPrayer);
 
       showFullScreenNotification(context, alarmId, contentType, isPrayer);
 
@@ -220,6 +224,36 @@ public class AlarmReceiver extends BroadcastReceiver {
       context.startActivity(launchIntent);
     } catch (Exception e) {
       Log.e(TAG, "Direct activity launch failed", e);
+    }
+  }
+
+  private void rescheduleForTomorrow(Context context, String alarmId, int hour, int minute, String contentType, boolean isPrayer) {
+    if (isPrayer) return;
+    try {
+      java.util.Calendar cal = java.util.Calendar.getInstance();
+      cal.add(java.util.Calendar.DAY_OF_YEAR, 1);
+      cal.set(java.util.Calendar.HOUR_OF_DAY, hour);
+      cal.set(java.util.Calendar.MINUTE, minute);
+      cal.set(java.util.Calendar.SECOND, 0);
+      cal.set(java.util.Calendar.MILLISECOND, 0);
+      Intent rescheduleIntent = new Intent("com.misykat.ALARM");
+      rescheduleIntent.setPackage(context.getPackageName());
+      rescheduleIntent.putExtra("alarmId", alarmId);
+      rescheduleIntent.putExtra("contentType", contentType);
+      rescheduleIntent.putExtra("isPrayer", isPrayer);
+      rescheduleIntent.putExtra("hour", hour);
+      rescheduleIntent.putExtra("minute", minute);
+      android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(
+        context, alarmId.hashCode(), rescheduleIntent,
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
+      );
+      android.app.AlarmManager am = (android.app.AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+      if (am != null) {
+        android.app.AlarmManager.AlarmClockInfo info = new android.app.AlarmManager.AlarmClockInfo(cal.getTimeInMillis(), null);
+        am.setAlarmClock(info, pi);
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to reschedule alarm", e);
     }
   }
 

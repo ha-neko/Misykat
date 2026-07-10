@@ -73,13 +73,21 @@ class MisykatAlarmModule : Module() {
       return
     }
 
+    val cal = java.util.Calendar.getInstance().apply { this.timeInMillis = timeInMillis }
+    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val minute = cal.get(java.util.Calendar.MINUTE)
+
     val intent = Intent().apply {
       action = "com.misykat.ALARM"
       setPackage(context.packageName)
       putExtra("alarmId", alarmId)
       putExtra("contentType", contentType)
       putExtra("isPrayer", isPrayer)
+      putExtra("hour", hour)
+      putExtra("minute", minute)
     }
+
+    saveAlarmConfig(context, alarmId, hour, minute, contentType, isPrayer)
 
     val pendingIntent = PendingIntent.getBroadcast(
       context,
@@ -106,6 +114,16 @@ class MisykatAlarmModule : Module() {
           Log.e(TAG, "All exact scheduling methods denied, alarm $alarmId will not fire on time")
         }
       }
+    }
+  }
+
+  private fun saveAlarmConfig(context: Context, alarmId: String, hour: Int, minute: Int, contentType: String, isPrayer: Boolean) {
+    try {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val json = "{\"id\":\"$alarmId\",\"hour\":$hour,\"minute\":$minute,\"contentType\":\"$contentType\",\"isPrayer\":$isPrayer}"
+      prefs.edit().putString("config_$alarmId", json).apply()
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to save alarm config", e)
     }
   }
 
@@ -200,6 +218,45 @@ class MisykatAlarmModule : Module() {
         context.startActivity(intent)
       } catch (e2: Exception) {
         Log.e(TAG, "Failed to open battery optimization settings", e2)
+      }
+    }
+  }
+
+  fun rescheduleForTomorrow(
+    context: Context, alarmId: String, hour: Int, minute: Int,
+    contentType: String, isPrayer: Boolean
+  ) {
+    if (isPrayer) return
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+    val cal = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, 1)
+      set(java.util.Calendar.HOUR_OF_DAY, hour)
+      set(java.util.Calendar.MINUTE, minute)
+      set(java.util.Calendar.SECOND, 0)
+      set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val intent = Intent().apply {
+      action = "com.misykat.ALARM"
+      setPackage(context.packageName)
+      putExtra("alarmId", alarmId)
+      putExtra("contentType", contentType)
+      putExtra("isPrayer", isPrayer)
+      putExtra("hour", hour)
+      putExtra("minute", minute)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+      context, alarmId.hashCode(), intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val alarmInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, null)
+    try {
+      alarmManager.setAlarmClock(alarmInfo, pendingIntent)
+      Log.d(TAG, "Rescheduled alarm $alarmId for tomorrow at ${hour}:${minute}")
+    } catch (e: SecurityException) {
+      try {
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pendingIntent)
+      } catch (e2: SecurityException) {
+        alarmManager.setWindow(AlarmManager.RTC_WAKEUP, cal.timeInMillis, 30000L, pendingIntent)
       }
     }
   }

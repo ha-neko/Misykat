@@ -15,7 +15,7 @@ import { AlarmIcon, AddIcon } from '../components/TabIcons';
 const typeColors = { Hadith: '#4C5A92', Surah: '#006B5E', Lecture: '#7B5800', Random: '#707973' };
 const USERNAME_KEY = 'app_username';
 
-function AlarmRow({ item, onToggle, onDelete, index, colors, label }) {
+function AlarmRow({ item, onToggle, onDelete, onEdit, index, colors, label }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -43,6 +43,7 @@ function AlarmRow({ item, onToggle, onDelete, index, colors, label }) {
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
       <TouchableOpacity
         style={[styles.alarmCard, !enabled && styles.alarmDisabled]}
+        onPress={() => onEdit(item)}
         onLongPress={() => onDelete(item.id)}
         activeOpacity={0.7}
       >
@@ -111,6 +112,10 @@ export default function HomeScreen({ navigation }) {
     try {
       setAlarms(await toggleAlarm(id));
     } catch {}
+  }
+
+  function handleEdit(alarm) {
+    navigation.navigate('EditAlarm', { alarm });
   }
 
   function handleDelete(id) {
@@ -210,9 +215,10 @@ export default function HomeScreen({ navigation }) {
                 item={item}
                 index={index}
                 colors={colors}
-                label={t(lk)}
-                onToggle={handleToggle}
-                onDelete={handleDelete}
+              label={t(lk)}
+              onToggle={handleToggle}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
               />
             );
           }}
