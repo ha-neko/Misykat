@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Switch, Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Switch, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,11 +10,11 @@ import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 
-const typeColors = { Hadith: '#00b894', Surah: '#0984e3', Lecture: '#e17055', Random: '#636e72' };
+const typeColors = { Hadith: '#4C5A92', Surah: '#006B5E', Lecture: '#7B5800', Random: '#707973' };
 const USERNAME_KEY = 'app_username';
 
 export default function HomeScreen({ navigation }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLocale();
   const [alarms, setAlarms] = useState([]);
   const [username, setUsername] = useState('');
@@ -73,35 +73,41 @@ export default function HomeScreen({ navigation }) {
             {formatTime(item.hour, item.minute)}
           </Text>
           {item.label ? <Text style={s.alarmLabel}>{item.label}</Text> : null}
-          <View style={[s.badge, { backgroundColor: typeColors[colorKey] || '#636e72' }]}>
+          <View style={[s.badge, { backgroundColor: typeColors[colorKey] || '#707973' }]}>
             <Text style={s.badgeText}>{label}</Text>
           </View>
         </View>
         <Switch
           value={enabled}
           onValueChange={() => handleToggle(item.id)}
-          trackColor={{ false: colors.border, true: '#81ecec' }}
-          thumbColor={enabled ? '#00b894' : colors.textSecondary}
+          trackColor={{ false: colors.outlineVariant, true: colors.primaryContainer }}
+          thumbColor={enabled ? colors.primary : colors.onSurfaceVariant}
+          ios_backgroundColor={colors.outlineVariant}
         />
       </TouchableOpacity>
     );
   }
 
-  const s = makeStyles(colors);
+  const s = makeStyles(colors, isDark);
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={['top']}>
       <View style={s.header}>
-        <View>
-          <Text style={s.greeting}>{t('greeting')}{username ? `, ${username}` : ''}</Text>
-          <Text style={s.title}>Misykat</Text>
+        <View style={s.headerContent}>
+          <View>
+            <Text style={s.greeting}>{t('greeting')}{username ? `, ${username}` : ''}</Text>
+            <Text style={s.title}>Misykat</Text>
+          </View>
+          <AppLogo size={28} color={colors.primary} />
         </View>
-        <AppLogo size={24} color={colors.accent} />
+        <View style={s.divider} />
       </View>
 
       {alarms.length === 0 ? (
         <View style={s.empty}>
-          <AppLogo size={40} color={colors.border} />
+          <View style={s.emptyCircle}>
+            <AppLogo size={36} color={colors.outline} />
+          </View>
           <Text style={s.emptyTitle}>{t('noAlarm')}</Text>
           <Text style={s.emptyHint}>{t('noAlarmHint')}</Text>
         </View>
@@ -115,46 +121,73 @@ export default function HomeScreen({ navigation }) {
         />
       )}
 
-      <TouchableOpacity style={s.fab} onPress={() => navigation.navigate('AddAlarm')}>
-        <Text style={s.fabText}>+</Text>
+      <TouchableOpacity style={s.fab} onPress={() => navigation.navigate('AddAlarm')} activeOpacity={0.85}>
+        <View style={s.fabSurface}>
+          <Text style={s.fabText}>+</Text>
+        </View>
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
-const makeStyles = (c) => StyleSheet.create({
+const makeStyles = (c, d) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    backgroundColor: c.card, borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
+    backgroundColor: c.surface,
   },
-  greeting: { fontSize: 13, color: c.accent, fontWeight: '600', letterSpacing: 0.3 },
-  title: { fontSize: 24, fontWeight: '800', color: c.text, marginTop: 2 },
-  list: { padding: 16, paddingBottom: 80 },
+  headerContent: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  divider: {
+    height: 1, backgroundColor: c.border, marginTop: 12, marginBottom: 0,
+    opacity: 0.5,
+  },
+  greeting: { fontSize: 13, color: c.primary, fontWeight: '500', letterSpacing: 0.3 },
+  title: { fontSize: 28, fontWeight: '700', color: c.onSurface, marginTop: 2, letterSpacing: -0.3 },
+  list: { padding: 16, paddingBottom: 100, paddingTop: 8 },
   alarmCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: c.card, borderRadius: 16, padding: 16, marginBottom: 10,
+    backgroundColor: c.surface, borderRadius: 16, padding: 16, marginBottom: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
   },
   alarmDisabled: { opacity: 0.4 },
   alarmLeft: { flex: 1 },
-  alarmTime: { fontSize: 32, fontWeight: '800', color: c.text, letterSpacing: -1 },
-  textMuted: { color: c.textSecondary },
-  alarmLabel: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+  alarmTime: { fontSize: 34, fontWeight: '600', color: c.onSurface, letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  textMuted: { color: c.onSurfaceVariant },
+  alarmLabel: { fontSize: 13, color: c.onSurfaceVariant, marginTop: 2 },
   badge: {
     alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3,
-    borderRadius: 8, marginTop: 6,
+    borderRadius: 6, marginTop: 6,
   },
-  badgeText: { fontSize: 11, color: '#fff', fontWeight: '700' },
+  badgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
   empty: {
     flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80,
   },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: c.textSecondary, marginTop: 12 },
-  emptyHint: { fontSize: 14, color: c.textTertiary, marginTop: 4 },
-  fab: {
-    position: 'absolute', right: 20, bottom: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
+  emptyCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center',
+    marginBottom: 16,
   },
-  fabText: { fontSize: 28, color: '#fff', fontWeight: '400', marginTop: -2 },
+  emptyTitle: { fontSize: 18, fontWeight: '600', color: c.onSurfaceVariant, marginTop: 8 },
+  emptyHint: { fontSize: 14, color: c.outline, marginTop: 4, textAlign: 'center', paddingHorizontal: 40 },
+  fab: {
+    position: 'absolute', right: 16, bottom: 16,
+  },
+  fabSurface: {
+    width: 56, height: 56, borderRadius: 16,
+    backgroundColor: c.primaryContainer, justifyContent: 'center', alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: c.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  fabText: { fontSize: 28, color: c.onPrimaryContainer, fontWeight: '300', marginTop: -2 },
 });

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import expo.modules.kotlin.modules.Module
@@ -48,6 +49,18 @@ class MisykatAlarmModule : Module() {
     Function("openFullScreenIntentSettings") {
       openFullScreenIntentSettings()
     }
+
+    Function("canScheduleExactAlarm") {
+      canScheduleExactAlarm()
+    }
+
+    Function("isIgnoringBatteryOptimizations") {
+      isIgnoringBatteryOptimizations()
+    }
+
+    Function("openBatteryOptimizationSettings") {
+      openBatteryOptimizationSettings()
+    }
   }
 
   private fun scheduleAlarm(alarmId: String, timeInMillis: Long, contentType: String, isPrayer: Boolean) {
@@ -79,9 +92,20 @@ class MisykatAlarmModule : Module() {
     try {
       alarmManager.setAlarmClock(alarmInfo, pendingIntent)
       Log.d(TAG, "Scheduled alarm $alarmId at $timeInMillis via setAlarmClock")
-    } catch (e: SecurityException) {
-      Log.w(TAG, "setAlarmClock denied, falling back to setExactAndAllowWhileIdle", e)
-      alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeInMillis, pendingIntent)
+    } catch (e1: SecurityException) {
+      Log.w(TAG, "setAlarmClock denied, trying setExactAndAllowWhileIdle", e1)
+      try {
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeInMillis, pendingIntent)
+        Log.d(TAG, "Scheduled alarm $alarmId via setExactAndAllowWhileIdle")
+      } catch (e2: SecurityException) {
+        Log.w(TAG, "setExactAndAllowWhileIdle also denied, trying setWindow", e2)
+        try {
+          alarmManager.setWindow(AlarmManager.RTC_WAKEUP, timeInMillis, 30000L, pendingIntent)
+          Log.d(TAG, "Scheduled alarm $alarmId via setWindow (30s window)")
+        } catch (e3: SecurityException) {
+          Log.e(TAG, "All exact scheduling methods denied, alarm $alarmId will not fire on time")
+        }
+      }
     }
   }
 
@@ -112,15 +136,19 @@ class MisykatAlarmModule : Module() {
   private fun getInitialAlarmData(): Map<String, Any?>? {
     val activity = appContext.currentActivity ?: return null
     val intent = activity.intent ?: return null
-    if (!intent.getBooleanExtra("fromAlarmReceiver", false)) {
+
+    val directLaunch = intent.getBooleanExtra("directLaunch", false)
+    if (!intent.getBooleanExtra("fromAlarmReceiver", false) && !directLaunch) {
       return mapOf("fromAlarm" to false)
     }
+
     val data = mutableMapOf<String, Any?>()
     data["fromAlarm"] = true
     intent.getStringExtra("alarmId")?.let { data["alarmId"] = it }
     intent.getStringExtra("contentType")?.let { data["contentType"] = it }
     data["isPrayer"] = intent.getBooleanExtra("isPrayer", false)
     intent.removeExtra("fromAlarmReceiver")
+    intent.removeExtra("directLaunch")
     return data
   }
 
@@ -140,6 +168,39 @@ class MisykatAlarmModule : Module() {
       activity.startActivity(intent)
     } catch (e: Exception) {
       Log.e(TAG, "Failed to open FSI settings", e)
+    }
+  }
+
+  private fun canScheduleExactAlarm(): Boolean {
+    if (Build.VERSION.SDK_INT < 31) return true
+    val context = appContext.reactContext ?: return false
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
+    return alarmManager.canScheduleExactAlarms()
+  }
+
+  private fun isIgnoringBatteryOptimizations(): Boolean {
+    val context = appContext.reactContext ?: return false
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+    return pm.isIgnoringBatteryOptimizations(context.packageName)
+  }
+
+  private fun openBatteryOptimizationSettings() {
+    val context = appContext.reactContext ?: return
+    try {
+      val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+        data = android.net.Uri.parse("package:${context.packageName}")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      context.startActivity(intent)
+    } catch (e: Exception) {
+      try {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+      } catch (e2: Exception) {
+        Log.e(TAG, "Failed to open battery optimization settings", e2)
+      }
     }
   }
 

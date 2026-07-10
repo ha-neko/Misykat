@@ -17,6 +17,7 @@ function addPermissions(manifest) {
     'android.permission.POST_NOTIFICATIONS',
     'android.permission.SYSTEM_ALERT_WINDOW',
     'android.permission.EXPAND_STATUS_BAR',
+    'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
   ];
   if (!manifest['manifest']) manifest['manifest'] = {};
   if (!manifest['manifest']['uses-permission']) manifest['manifest']['uses-permission'] = [];
@@ -145,10 +146,12 @@ public class AlarmReceiver extends BroadcastReceiver {
     try {
       PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
       wl = pm.newWakeLock(
-        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+        PowerManager.FULL_WAKE_LOCK |
+        PowerManager.ACQUIRE_CAUSES_WAKEUP |
+        PowerManager.ON_AFTER_RELEASE,
         "Misykat:WakeLock"
       );
-      wl.acquire(10000);
+      wl.acquire(15000);
 
       String alarmId = intent.getStringExtra("alarmId");
       String contentType = intent.getStringExtra("contentType");
@@ -157,6 +160,8 @@ public class AlarmReceiver extends BroadcastReceiver {
       savePendingAlarm(context, alarmId, contentType, isPrayer);
 
       showFullScreenNotification(context, alarmId, contentType, isPrayer);
+
+      launchAlarmActivity(context, alarmId, contentType, isPrayer);
     } catch (Exception e) {
       Log.e(TAG, "Failed to process alarm", e);
     } finally {
@@ -164,6 +169,27 @@ public class AlarmReceiver extends BroadcastReceiver {
         try { wl.release(); } catch (Exception ignored) {}
       }
       pendingResult.finish();
+    }
+  }
+
+  private void launchAlarmActivity(Context context, String alarmId, String contentType, boolean isPrayer) {
+    try {
+      Intent launchIntent = new Intent(context, MainActivity.class);
+      launchIntent.addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK |
+        Intent.FLAG_ACTIVITY_SINGLE_TOP |
+        Intent.FLAG_ACTIVITY_CLEAR_TOP |
+        Intent.FLAG_ACTIVITY_NO_USER_ACTION
+      );
+      launchIntent.putExtra("alarmId", alarmId);
+      launchIntent.putExtra("contentType", contentType);
+      launchIntent.putExtra("isPrayer", isPrayer);
+      launchIntent.putExtra("fromAlarmReceiver", true);
+      launchIntent.putExtra("directLaunch", true);
+
+      context.startActivity(launchIntent);
+    } catch (Exception e) {
+      Log.e(TAG, "Direct activity launch failed", e);
     }
   }
 
@@ -211,6 +237,8 @@ public class AlarmReceiver extends BroadcastReceiver {
       .setFullScreenIntent(fullScreenIntent, true)
       .setAutoCancel(true)
       .setOngoing(false)
+      .setVisibility(Notification.VISIBILITY_PUBLIC)
+      .setDefaults(Notification.DEFAULT_ALL)
       .build();
 
     notificationManager.notify(requestCode, notification);
@@ -221,13 +249,16 @@ public class AlarmReceiver extends BroadcastReceiver {
       NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
       if (channel == null) {
         channel = new NotificationChannel(CHANNEL_ID, "Misykat", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("Misykat alarm notifications");
-        channel.setBypassDnd(true);
-        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        channel.enableVibration(true);
-        channel.setShowBadge(true);
-        manager.createNotificationChannel(channel);
+      } else {
+        channel.setImportance(NotificationManager.IMPORTANCE_HIGH);
       }
+      channel.setDescription("Misykat alarm notifications");
+      channel.setBypassDnd(true);
+      channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+      channel.enableVibration(true);
+      channel.setShowBadge(true);
+      channel.setSound(null, null);
+      manager.createNotificationChannel(channel);
     }
   }
 }

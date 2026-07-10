@@ -36,6 +36,7 @@
         "USE_EXACT_ALARM",
         "POST_NOTIFICATIONS",
         "USE_FULL_SCREEN_INTENT",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ]

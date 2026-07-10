@@ -69,3 +69,30 @@ export async function openFullScreenIntentSettings() {
     console.warn('Failed to open FSI settings:', e.message);
   }
 }
+
+export async function canScheduleExactAlarm() {
+  if (Platform.OS !== 'android' || !Native) return true;
+  try {
+    return await Native.canScheduleExactAlarm();
+  } catch {
+    return true;
+  }
+}
+
+export async function isIgnoringBatteryOptimizations() {
+  if (Platform.OS !== 'android' || !Native) return true;
+  try {
+    return await Native.isIgnoringBatteryOptimizations();
+  } catch {
+    return true;
+  }
+}
+
+export async function openBatteryOptimizationSettings() {
+  if (Platform.OS !== 'android' || !Native) return;
+  try {
+    await Native.openBatteryOptimizationSettings();
+  } catch (e) {
+    console.warn('Failed to open battery optimization settings:', e.message);
+  }
+}

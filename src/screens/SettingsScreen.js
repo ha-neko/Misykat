@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch,
-  TextInput, Modal,
+  TextInput, Modal, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { clearAudioCache } from '../utils/cacheManager';
 import { getUserProfile } from '../utils/recommendation';
+import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 import { SunIcon, CrescentIcon } from '../components/Icons';
@@ -54,146 +55,133 @@ export default function SettingsScreen() {
   }
 
   async function handleClearCache() {
-    Alert.alert(t('clearCache'), t('clearCacheConfirm'), [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('delete'), style: 'destructive',
-        onPress: async () => {
-          await clearAudioCache();
-          setCacheSize('0 B');
-          Alert.alert(t('success'), t('cacheCleared'));
-        },
-      },
-    ]);
-  }
-
-  function getWeightBar(val) {
-    const pct = Math.min((val / 5) * 100, 100);
-    return (
-      <View style={[s.weightTrack, { backgroundColor: colors.border }]}>
-        <View style={[s.weightFill, { width: `${pct}%`, backgroundColor: colors.accent }]} />
-      </View>
-    );
+    try {
+      await clearAudioCache();
+      setCacheSize('0 B');
+      Alert.alert(t('success'), t('cacheCleared'));
+    } catch {
+      Alert.alert(t('error'), t('cacheClearFailed'));
+    }
   }
 
   const s = makeStyles(colors);
 
   return (
-    <SafeAreaView style={s.container}>
-      <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.pageTitle}>{t('settings')}</Text>
+    <SafeAreaView style={s.container} edges={['top']}>
+      <View style={s.appBar}>
+        <Text style={s.screenTitle}>{t('settings')}</Text>
+        <AppLogo size={22} color={colors.primary} />
+      </View>
 
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('profile')}</Text>
-          <TouchableOpacity style={s.row} onPress={openNameEditor}>
-            <Text style={s.rowLabel}>{t('name')}</Text>
-            <Text style={s.rowValue}>{username || t('tapToSet')}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        <Text style={s.sectionHeader}>{t('profile')}</Text>
+        <View style={s.card}>
+          <TouchableOpacity style={s.row} onPress={openNameEditor} activeOpacity={0.7}>
+            <Text style={s.rowLabel}>{t('username')}</Text>
+            <View style={s.rowRight}>
+              <Text style={[s.rowValue, !username && s.rowPlaceholder]}>
+                {username || t('setUsername')}
+              </Text>
+              <Text style={s.arrow}>→</Text>
+            </View>
           </TouchableOpacity>
+
+          {profile && (
+            <View style={s.statsRow}>
+              <View style={s.stat}>
+                <Text style={s.statValue}>{profile.totalRecommended}</Text>
+                <Text style={s.statLabel}>{t('recommended')}</Text>
+              </View>
+              <View style={s.stat}>
+                <Text style={s.statValue}>{profile.totalEngaged}</Text>
+                <Text style={s.statLabel}>{t('engaged')}</Text>
+              </View>
+              <View style={s.stat}>
+                <Text style={s.statValue}>{profile.totalSkipped}</Text>
+                <Text style={s.statLabel}>{t('skipped')}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('display')}</Text>
-          <View style={s.themeRow}>
-            <SunIcon color={isDark ? colors.textSecondary : colors.accent} size={20} />
-            <View style={s.themeLabel}>
-              <Text style={s.themeText}>{t('lightMode')}</Text>
+        <Text style={s.sectionHeader}>{t('appearance')}</Text>
+        <View style={s.card}>
+          <View style={s.row}>
+            <View style={s.rowLeft}>
+              <View style={s.iconWrap}>
+                {isDark ? <CrescentIcon color={colors.primary} size={18} /> : <SunIcon color={colors.primary} size={18} />}
+              </View>
+              <View>
+                <Text style={s.rowLabel}>{t('theme')}</Text>
+                <Text style={s.rowHint}>{isDark ? t('dark') : t('light')}</Text>
+              </View>
             </View>
             <Switch
-              value={!isDark}
+              value={isDark}
               onValueChange={toggleTheme}
-              trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor={!isDark ? '#fff' : colors.textSecondary}
+              trackColor={{ false: colors.outlineVariant, true: colors.primaryContainer }}
+              thumbColor={isDark ? colors.primary : colors.onSurfaceVariant}
             />
-            <CrescentIcon color={!isDark ? colors.textSecondary : colors.accent} size={20} />
           </View>
-        </View>
 
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('settings')}</Text>
-          <View style={s.langRow}>
-            <Text style={s.langLabel}>Bahasa / Language</Text>
-            <View style={s.langToggle}>
-              <TouchableOpacity
-                style={[s.langBtn, lang === 'id' && s.langBtnActive]}
-                onPress={() => setLanguage('id')}
-              >
-                <Text style={[s.langBtnText, lang === 'id' && s.langBtnTextActive]}>ID</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.langBtn, lang === 'en' && s.langBtnActive]}
-                onPress={() => setLanguage('en')}
-              >
-                <Text style={[s.langBtnText, lang === 'en' && s.langBtnTextActive]}>EN</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          <View style={s.divider} />
 
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('audioCache')}</Text>
           <View style={s.row}>
-            <Text style={s.rowLabel}>{t('cacheSize')}</Text>
+            <Text style={s.rowLabel}>{t('language')}</Text>
+            <TouchableOpacity
+              onPress={() => setLanguage(lang === 'id' ? 'en' : 'id')}
+              style={s.langBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={s.langText}>{lang === 'id' ? 'Indonesia' : 'English'}</Text>
+              <Text style={s.arrow}>→</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={s.sectionHeader}>{t('storage')}</Text>
+        <View style={s.card}>
+          <View style={s.row}>
+            <Text style={s.rowLabel}>{t('audioCache')}</Text>
             <Text style={s.rowValue}>{cacheSize}</Text>
           </View>
-          <TouchableOpacity style={s.dangerBtn} onPress={handleClearCache}>
-            <Text style={s.dangerBtnText}>{t('clearCache')}</Text>
+          <TouchableOpacity style={s.actionBtn} onPress={handleClearCache} activeOpacity={0.7}>
+            <Text style={s.actionBtnText}>{t('clearCache')}</Text>
           </TouchableOpacity>
         </View>
 
-        {profile && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>{t('contentPref')}</Text>
-            <Text style={s.hint}>{t('contentHint')}</Text>
-            <View style={s.statRow}>
-              <Text style={s.statLabel}>{t('hadith')}</Text>
-              {getWeightBar(profile.hadithWeight)}
-              <Text style={s.statVal}>{profile.hadithWeight.toFixed(1)}</Text>
-            </View>
-            <View style={s.statRow}>
-              <Text style={s.statLabel}>{t('surah')}</Text>
-              {getWeightBar(profile.surahWeight)}
-              <Text style={s.statVal}>{profile.surahWeight.toFixed(1)}</Text>
-            </View>
-            <View style={s.statRow}>
-              <Text style={s.statLabel}>{t('ceramah')}</Text>
-              {getWeightBar(profile.ceramahWeight)}
-              <Text style={s.statVal}>{profile.ceramahWeight.toFixed(1)}</Text>
-            </View>
-            <View style={s.row}>
-              <Text style={s.rowLabel}>{t('totalInteractions')}</Text>
-              <Text style={s.rowValue}>{profile.totalInteractions}</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{t('about')}</Text>
+        <Text style={s.sectionHeader}>{t('about')}</Text>
+        <View style={s.card}>
           <View style={s.row}>
-            <Text style={s.rowLabel}>Misykat</Text>
-            <Text style={s.rowValue}>v1.0</Text>
+            <Text style={s.rowLabel}>{t('version')}</Text>
+            <Text style={s.rowValue}>1.0.0</Text>
           </View>
-          <Text style={s.aboutText}>{t('aboutDesc')}</Text>
+        </View>
+
+        <View style={s.footer}>
+          <AppLogo size={20} color={colors.outline} />
+          <Text style={s.footerText}>Misykat</Text>
         </View>
       </ScrollView>
 
       <Modal visible={showNameModal} transparent animationType="fade">
         <View style={s.overlay}>
           <View style={s.modal}>
-            <Text style={s.modalTitle}>{t('yourName')}</Text>
+            <Text style={s.modalTitle}>{t('username')}</Text>
             <TextInput
               style={s.modalInput}
               value={tempName}
               onChangeText={setTempName}
-              placeholder={t('enterName')}
-              placeholderTextColor={colors.textSecondary}
+              placeholder={t('setUsername')}
+              placeholderTextColor={colors.outline}
               autoFocus
             />
             <View style={s.modalBtns}>
-              <TouchableOpacity onPress={() => setShowNameModal(false)}>
-                <Text style={s.modalCancel}>{t('cancel')}</Text>
+              <TouchableOpacity onPress={() => setShowNameModal(false)} style={s.modalBtn}>
+                <Text style={s.modalBtnText}>{t('cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={saveName}>
-                <Text style={s.modalSave}>{t('save')}</Text>
+              <TouchableOpacity onPress={saveName} style={s.modalSaveBtn}>
+                <Text style={s.modalSaveText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -205,70 +193,79 @@ export default function SettingsScreen() {
 
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  pageTitle: { fontSize: 24, fontWeight: '700', color: c.text, marginBottom: 20, letterSpacing: 0.3 },
-  section: {
-    backgroundColor: c.card, borderRadius: 16, padding: 20, marginBottom: 16,
+  appBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 12 },
-  hint: { fontSize: 12, color: c.textSecondary, marginBottom: 12, fontStyle: 'italic' },
-  themeRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  screenTitle: { fontSize: 22, fontWeight: '700', color: c.onSurface },
+  scroll: { paddingBottom: 40 },
+  sectionHeader: {
+    fontSize: 11, fontWeight: '600', color: c.primary, letterSpacing: 1.2,
+    marginTop: 8, marginBottom: 8, paddingHorizontal: 16, textTransform: 'uppercase',
+  },
+  card: {
+    backgroundColor: c.surface, borderRadius: 16, marginHorizontal: 16, marginBottom: 8,
     paddingVertical: 4,
+    ...Platform.select({
+      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
   },
-  themeLabel: { flex: 1, marginLeft: 10 },
-  themeText: { fontSize: 14, color: c.text, fontWeight: '600' },
-  langRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  langLabel: { fontSize: 14, color: c.text, fontWeight: '600' },
-  langToggle: { flexDirection: 'row', gap: 4 },
-  langBtn: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8,
-    backgroundColor: c.borderLight,
-  },
-  langBtnActive: { backgroundColor: c.accent },
-  langBtnText: { fontSize: 13, fontWeight: '700', color: c.textSecondary },
-  langBtnTextActive: { color: '#fff' },
   row: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.borderLight,
+    paddingVertical: 14, paddingHorizontal: 16, minHeight: 48,
   },
-  rowLabel: { fontSize: 14, color: c.textSecondary },
-  rowValue: { fontSize: 14, color: c.text, fontWeight: '600' },
-  statRow: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8,
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconWrap: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: c.primaryContainer, justifyContent: 'center', alignItems: 'center',
   },
-  statLabel: { fontSize: 13, color: c.textSecondary, width: 70 },
-  weightTrack: {
-    flex: 1, height: 8, borderRadius: 4, overflow: 'hidden',
+  rowLabel: { fontSize: 15, color: c.onSurface, fontWeight: '500' },
+  rowHint: { fontSize: 12, color: c.onSurfaceVariant, marginTop: 1 },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowValue: { fontSize: 14, color: c.onSurfaceVariant },
+  rowPlaceholder: { color: c.outline, fontStyle: 'italic' },
+  arrow: { fontSize: 16, color: c.outline },
+  divider: { height: 1, backgroundColor: c.borderLight, marginHorizontal: 16 },
+  statsRow: {
+    flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.borderLight,
+    marginTop: 4, paddingVertical: 12,
   },
-  weightFill: {
-    height: '100%', borderRadius: 4,
+  stat: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: 18, fontWeight: '700', color: c.primary },
+  statLabel: { fontSize: 11, color: c.onSurfaceVariant, marginTop: 2 },
+  langBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  langText: { fontSize: 14, color: c.primary, fontWeight: '500' },
+  actionBtn: {
+    marginHorizontal: 16, marginBottom: 12, padding: 12,
+    backgroundColor: c.errorContainer, borderRadius: 10, alignItems: 'center',
   },
-  statVal: { fontSize: 12, color: c.textTertiary, width: 30, textAlign: 'right' },
-  dangerBtn: {
-    backgroundColor: 'rgba(231,76,60,0.1)', borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 12,
+  actionBtnText: { fontSize: 13, color: c.onErrorContainer, fontWeight: '600' },
+  footer: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginTop: 24, gap: 8, opacity: 0.5,
   },
-  dangerBtnText: { color: c.danger, fontSize: 14, fontWeight: '600' },
-  aboutText: {
-    fontSize: 13, color: c.textSecondary, lineHeight: 20, marginTop: 8, fontStyle: 'italic',
-  },
+  footerText: { fontSize: 13, color: c.outline, fontWeight: '500' },
   overlay: {
-    flex: 1, backgroundColor: c.overlay, justifyContent: 'center', alignItems: 'center',
+    flex: 1, backgroundColor: c.scrim + '60', justifyContent: 'center', alignItems: 'center',
   },
   modal: {
-    backgroundColor: c.card, borderRadius: 20, padding: 24, width: '80%',
+    backgroundColor: c.surface, borderRadius: 24, padding: 24, width: '82%',
+    ...Platform.select({
+      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 24 },
+      android: { elevation: 8 },
+    }),
   },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: c.text, marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: c.onSurface, marginBottom: 16 },
   modalInput: {
-    borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 14, fontSize: 15,
-    color: c.text, backgroundColor: c.bg,
+    borderWidth: 1, borderColor: c.outlineVariant, borderRadius: 12, padding: 14, fontSize: 15,
+    color: c.onSurface, backgroundColor: c.bg,
   },
-  modalBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 12 },
-  modalCancel: { fontSize: 14, color: c.textSecondary, fontWeight: '600', padding: 8 },
-  modalSave: {
-    fontSize: 14, color: '#fff', fontWeight: '700', backgroundColor: c.accent,
-    borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10,
+  modalBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 8 },
+  modalBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  modalBtnText: { fontSize: 14, color: c.onSurfaceVariant, fontWeight: '500' },
+  modalSaveBtn: {
+    backgroundColor: c.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8,
   },
+  modalSaveText: { fontSize: 14, color: c.onPrimary, fontWeight: '600' },
 });

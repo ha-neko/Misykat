@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated, Platform,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
@@ -43,8 +43,8 @@ export default function AlarmRingingScreen({ route, navigation }) {
   function startPulse() {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     ).start();
   }
@@ -55,7 +55,6 @@ export default function AlarmRingingScreen({ route, navigation }) {
     setAudioInfo(firstSrc);
 
     const sources = [firstSrc];
-
     if (c.type === 'Surah') {
       for (let i = 0; i < 4; i++) {
         const alt = getAudioForContent(c, isPrayer);
@@ -147,13 +146,11 @@ export default function AlarmRingingScreen({ route, navigation }) {
 
   const s = makeStyles(colors);
 
-  if (!content) return null;
-
   return (
     <SafeAreaView style={s.container}>
       <View style={s.content}>
         <Animated.View style={[s.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
-          <AppLogo size={56} color={colors.accent} />
+          <AppLogo size={64} color={colors.primary} />
         </Animated.View>
 
         <Text style={s.alarmTitle}>
@@ -166,15 +163,17 @@ export default function AlarmRingingScreen({ route, navigation }) {
           <Text style={s.audioName}>{audioInfo.name}</Text>
         ) : null}
 
+        <View style={s.divider} />
+
         {isPrayer ? (
-          <View style={s.prayerCard}>
+          <View style={s.card}>
             <Text style={s.prayerText}>{t('prayNow')}</Text>
             <Text style={s.prayerSubtext}>
               "Sesungguhnya sholat itu adalah kewajiban yang ditentukan waktunya atas orang-orang yang beriman" (QS. An-Nisa: 103)
             </Text>
           </View>
-        ) : (
-          <View style={s.contentCard}>
+        ) : content ? (
+          <View style={s.card}>
             <View style={s.typeBadge}>
               <Text style={s.typeText}>{content.type}</Text>
             </View>
@@ -196,13 +195,13 @@ export default function AlarmRingingScreen({ route, navigation }) {
               <Text style={s.topic}>{content.topic}</Text>
             )}
           </View>
-        )}
+        ) : null}
 
         <View style={s.buttons}>
-          <TouchableOpacity style={s.snoozeButton} onPress={snoozeAlarm}>
+          <TouchableOpacity style={s.snoozeButton} onPress={snoozeAlarm} activeOpacity={0.7}>
             <Text style={s.snoozeText}>{t('snooze')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.stopButton} onPress={stopAlarm}>
+          <TouchableOpacity style={s.stopButton} onPress={stopAlarm} activeOpacity={0.85}>
             <Text style={s.stopText}>{t('dismiss')}</Text>
           </TouchableOpacity>
         </View>
@@ -214,41 +213,51 @@ export default function AlarmRingingScreen({ route, navigation }) {
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  logoContainer: { marginBottom: 20 },
-  alarmTitle: { fontSize: 28, fontWeight: '800', color: c.accent, marginBottom: 8, letterSpacing: 0.5 },
-  statusText: { color: c.textSecondary, fontSize: 13, marginBottom: 16 },
-  audioName: { color: '#fdcb6e', fontSize: 11, marginBottom: 20, fontStyle: 'italic', letterSpacing: 0.3 },
-  prayerCard: {
-    backgroundColor: c.card, borderRadius: 20, padding: 24, width: '100%', alignItems: 'center',
-    borderWidth: 1, borderColor: c.border,
+  logoContainer: { marginBottom: 16 },
+  alarmTitle: { fontSize: 28, fontWeight: '600', color: c.primary, marginBottom: 4, letterSpacing: 0.3 },
+  statusText: { color: c.onSurfaceVariant, fontSize: 13, marginBottom: 12 },
+  audioName: { color: c.accent, fontSize: 11, marginBottom: 16, fontStyle: 'italic', letterSpacing: 0.3 },
+  divider: { width: 40, height: 3, backgroundColor: c.primary, borderRadius: 2, marginBottom: 20, opacity: 0.2 },
+  card: {
+    backgroundColor: c.surface, borderRadius: 20, padding: 24, width: '100%', alignItems: 'center',
+    ...Platform.select({
+      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+      android: { elevation: 2 },
+    }),
   },
-  prayerText: { fontSize: 18, fontWeight: '700', color: '#e74c3c', marginBottom: 12, textAlign: 'center' },
-  prayerSubtext: { fontSize: 13, color: c.textSecondary, textAlign: 'center', fontStyle: 'italic', lineHeight: 20 },
-  contentCard: {
-    backgroundColor: c.card, borderRadius: 20, padding: 24, width: '100%', alignItems: 'center',
-    borderWidth: 1, borderColor: c.border,
+  prayerText: { fontSize: 18, fontWeight: '700', color: c.error, marginBottom: 12, textAlign: 'center' },
+  prayerSubtext: {
+    fontSize: 13, color: c.onSurfaceVariant, textAlign: 'center', fontStyle: 'italic',
+    lineHeight: 20, paddingHorizontal: 8,
   },
   typeBadge: {
-    backgroundColor: c.accent, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginBottom: 16,
+    backgroundColor: c.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, marginBottom: 16,
   },
-  typeText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  contentTitle: { fontSize: 20, fontWeight: '800', color: c.text, textAlign: 'center', marginBottom: 14 },
+  typeText: { color: c.onPrimary, fontSize: 11, fontWeight: '600', letterSpacing: 1 },
+  contentTitle: { fontSize: 20, fontWeight: '700', color: c.onSurface, textAlign: 'center', marginBottom: 14 },
   arabic: {
-    fontSize: 24, color: '#fdcb6e', textAlign: 'center', marginBottom: 14,
+    fontSize: 24, color: c.accent, textAlign: 'center', marginBottom: 14,
     lineHeight: 38, writingDirection: 'rtl',
   },
-  translation: { fontSize: 14, color: c.textSecondary, textAlign: 'center', marginBottom: 8, fontStyle: 'italic', lineHeight: 22 },
-  explanation: { fontSize: 12, color: c.textTertiary, textAlign: 'center', marginTop: 8, lineHeight: 18 },
-  source: { fontSize: 11, color: c.accent, marginTop: 10, fontStyle: 'italic', opacity: 0.7 },
-  topic: { fontSize: 12, color: c.textTertiary, textAlign: 'center', marginTop: 8, lineHeight: 18, fontStyle: 'italic' },
+  translation: {
+    fontSize: 14, color: c.onSurfaceVariant, textAlign: 'center', marginBottom: 8,
+    fontStyle: 'italic', lineHeight: 22,
+  },
+  explanation: { fontSize: 12, color: c.outline, textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  source: { fontSize: 11, color: c.primary, marginTop: 10, fontStyle: 'italic', opacity: 0.7 },
+  topic: { fontSize: 12, color: c.outline, textAlign: 'center', marginTop: 8, lineHeight: 18, fontStyle: 'italic' },
   buttons: { flexDirection: 'row', gap: 12, marginTop: 28 },
   snoozeButton: {
-    backgroundColor: c.card, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 32,
-    borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.surface, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32,
+    borderWidth: 1, borderColor: c.outlineVariant,
   },
-  snoozeText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
+  snoozeText: { color: c.onSurfaceVariant, fontSize: 15, fontWeight: '500' },
   stopButton: {
-    backgroundColor: c.accent, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 32,
+    backgroundColor: c.primary, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32,
+    ...Platform.select({
+      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6 },
+      android: { elevation: 3 },
+    }),
   },
-  stopText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  stopText: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
 });
