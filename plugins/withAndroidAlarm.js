@@ -203,7 +203,7 @@ public class AlarmReceiver extends BroadcastReceiver {
     );
 
     Notification notification = new Notification.Builder(context, CHANNEL_ID)
-      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+      .setSmallIcon(android.R.drawable.ic_dialog_alert)
       .setContentTitle("Misykat")
       .setContentText("Waktunya bangun!")
       .setPriority(Notification.PRIORITY_MAX)
