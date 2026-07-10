@@ -8,6 +8,7 @@ import * as Notifications from 'expo-notifications';
 import * as Location from 'expo-location';
 import { useTheme } from '../theme/ThemeContext';
 import AppLogo from '../components/AppLogo';
+import { canUseFullScreenIntent, openFullScreenIntentSettings } from '../utils/nativeAlarm';
 
 const PERM_KEY = 'perm_granted';
 
@@ -27,16 +28,15 @@ const steps = [
   {
     key: 'fsi',
     title: 'Izin Layar Penuh',
-    desc: 'Agar alarm otomatis muncul tanpa perlu mengetuk notifikasi',
+    desc: Platform.OS === 'android' && Platform.Version >= 34
+      ? 'Buka Settings > Izinkan "Full screen intent" untuk Misykat (Android 14+)'
+      : 'Agar alarm otomatis muncul tanpa perlu mengetuk notifikasi',
     request: async () => {
       if (Platform.OS === 'android' && Platform.Version >= 33) {
-        try {
-          const PermissionsAndroid = require('react-native').PermissionsAndroid;
-          const result = await PermissionsAndroid.request('android.permission.USE_FULL_SCREEN_INTENT');
-          return result === 'granted';
-        } catch {
-          return false;
-        }
+        const ok = await canUseFullScreenIntent();
+        if (ok) return true;
+        await openFullScreenIntentSettings();
+        return false;
       }
       return true;
     },

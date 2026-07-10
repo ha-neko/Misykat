@@ -1,21 +1,28 @@
 package com.misykat.alarm
 
 import android.app.AlarmManager
+import android.app.AlarmManager.AlarmClockInfo
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class MisykatAlarmModule : Module() {
   private val TAG = "MisykatAlarmModule"
+  private val PREFS_NAME = "misykat_alarm"
+  private val KEY_PENDING_ALARM = "pendingAlarmData"
 
   override fun definition() = ModuleDefinition {
     Name("MisykatAlarm")
 
     Function("scheduleAlarm") { alarmId: String, timeInMillis: Double, contentType: String, isPrayer: Boolean ->
-      scheduleAlarm(alarmId, timeInMillis, contentType, isPrayer)
+      scheduleAlarm(alarmId, timeInMillis.toLong(), contentType, isPrayer)
     }
 
     Function("cancelAlarm") { alarmId: String ->
@@ -33,30 +40,17 @@ class MisykatAlarmModule : Module() {
     Function("checkPendingAlarm") {
       checkPendingAlarm()
     }
-  }
 
-  companion object {
-    @JvmStatic
-    private var pendingAlarmData: Map<String, Any?>? = null
+    Function("canUseFullScreenIntent") {
+      canUseFullScreenIntent()
+    }
 
-    @JvmStatic
-    fun firePendingAlarm(alarmId: String?, contentType: String?, isPrayer: Boolean) {
-      val data = mutableMapOf<String, Any?>()
-      data["fromAlarm"] = true
-      if (alarmId != null) data["alarmId"] = alarmId
-      if (contentType != null) data["contentType"] = contentType
-      data["isPrayer"] = isPrayer
-      pendingAlarmData = data
+    Function("openFullScreenIntentSettings") {
+      openFullScreenIntentSettings()
     }
   }
 
-  private fun checkPendingAlarm(): Map<String, Any?> {
-    val data = pendingAlarmData
-    pendingAlarmData = null
-    return data ?: mapOf("fromAlarm" to false)
-  }
-
-  private fun scheduleAlarm(alarmId: String, timeInMillis: Double, contentType: String, isPrayer: Boolean) {
+  private fun scheduleAlarm(alarmId: String, timeInMillis: Long, contentType: String, isPrayer: Boolean) {
     val context = appContext.reactContext ?: run {
       Log.e(TAG, "No react context")
       return
@@ -81,8 +75,9 @@ class MisykatAlarmModule : Module() {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeInMillis.toLong(), pendingIntent)
-    Log.d(TAG, "Scheduled alarm $alarmId at $timeInMillis")
+    val alarmInfo = AlarmClockInfo(timeInMillis, null)
+    alarmManager.setAlarmClock(alarmInfo, pendingIntent)
+    Log.d(TAG, "Scheduled alarm $alarmId at $timeInMillis via setAlarmClock")
   }
 
   private fun cancelAlarm(alarmId: String) {
@@ -122,5 +117,41 @@ class MisykatAlarmModule : Module() {
     data["isPrayer"] = intent.getBooleanExtra("isPrayer", false)
     intent.removeExtra("fromAlarmReceiver")
     return data
+  }
+
+  private fun canUseFullScreenIntent(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+    val context = appContext.reactContext ?: return false
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
+    return nm.canUseFullScreenIntent()
+  }
+
+  private fun openFullScreenIntentSettings() {
+    val context = appContext.reactContext ?: return
+    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+      data = android.net.Uri.parse("package:${context.packageName}")
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
+  }
+
+  private fun checkPendingAlarm(): Map<String, Any?> {
+    val context = appContext.reactContext ?: return mapOf("fromAlarm" to false)
+    try {
+      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val raw = prefs.getString(KEY_PENDING_ALARM, null) ?: return mapOf("fromAlarm" to false)
+      prefs.edit().remove(KEY_PENDING_ALARM).apply()
+      val parts = raw.split("|", limit = 3)
+      if (parts.size < 3) return mapOf("fromAlarm" to false)
+      return mapOf(
+        "fromAlarm" to true,
+        "alarmId" to parts[0],
+        "contentType" to (parts[1].ifEmpty { null } ?: ""),
+        "isPrayer" to (parts[2].toBoolean())
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to read pending alarm", e)
+      return mapOf("fromAlarm" to false)
+    }
   }
 }

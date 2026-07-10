@@ -51,3 +51,21 @@ export async function checkPendingAlarm() {
     return { fromAlarm: false, alarmId: '', contentType: '', isPrayer: false };
   }
 }
+
+export async function canUseFullScreenIntent() {
+  if (Platform.OS !== 'android' || !Native) return true;
+  try {
+    return await Native.canUseFullScreenIntent();
+  } catch {
+    return true;
+  }
+}
+
+export async function openFullScreenIntentSettings() {
+  if (Platform.OS !== 'android' || !Native) return;
+  try {
+    await Native.openFullScreenIntentSettings();
+  } catch (e) {
+    console.warn('Failed to open FSI settings:', e.message);
+  }
+}

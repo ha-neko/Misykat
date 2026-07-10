@@ -125,6 +125,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
@@ -133,30 +134,46 @@ public class AlarmReceiver extends BroadcastReceiver {
   private static final String TAG = "MisykatAlarm";
   private static final String CHANNEL_ID = "alarm";
   private static final int NOTIFICATION_ID_BASE = 9001;
+  private static final String PREFS_NAME = "misykat_alarm";
+  private static final String KEY_PENDING_ALARM = "pendingAlarmData";
 
   @Override
   public void onReceive(Context context, Intent intent) {
-    Log.d(TAG, "Alarm received! action=" + intent.getAction());
-
-    PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-    PowerManager.WakeLock wl = pm.newWakeLock(
-      PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
-      "Misykat:WakeLock"
-    );
-    wl.acquire(10000);
+    PowerManager.WakeLock wl = null;
+    PendingResult pendingResult = goAsync();
 
     try {
+      PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+      wl = pm.newWakeLock(
+        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+        "Misykat:WakeLock"
+      );
+      wl.acquire(10000);
+
       String alarmId = intent.getStringExtra("alarmId");
       String contentType = intent.getStringExtra("contentType");
       boolean isPrayer = intent.getBooleanExtra("isPrayer", false);
 
-      MisykatAlarmModule.firePendingAlarm(alarmId, contentType, isPrayer);
+      savePendingAlarm(context, alarmId, contentType, isPrayer);
 
       showFullScreenNotification(context, alarmId, contentType, isPrayer);
     } catch (Exception e) {
       Log.e(TAG, "Failed to process alarm", e);
     } finally {
-      try { if (wl.isHeld()) wl.release(); } catch (Exception ignored) {}
+      if (wl != null && wl.isHeld()) {
+        try { wl.release(); } catch (Exception ignored) {}
+      }
+      pendingResult.finish();
+    }
+  }
+
+  private void savePendingAlarm(Context context, String alarmId, String contentType, boolean isPrayer) {
+    try {
+      SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+      String data = alarmId + "|" + (contentType != null ? contentType : "") + "|" + isPrayer;
+      prefs.edit().putString(KEY_PENDING_ALARM, data).apply();
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to save pending alarm", e);
     }
   }
 
