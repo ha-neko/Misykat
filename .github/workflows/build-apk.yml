@@ -31,14 +31,26 @@ jobs:
       - name: Expo prebuild (generate android)
         run: npx expo prebuild --clean --no-install
 
-      - name: Build APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+      - name: Build APK (debug)
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
 
-      - name: Upload APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Misykat-APK
+          name: Misykat-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Build APK (release)
+        run: cd android && ./gradlew assembleRelease
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Misykat-Release-APK
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
