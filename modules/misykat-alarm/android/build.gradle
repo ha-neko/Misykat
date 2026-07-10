@@ -1,11 +1,11 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
-group = 'com.misykat.alarm'
+group = 'com.misykat.alarm.module'
 version = '1.0.0'
 
 android {
-  namespace = 'com.misykat.alarm'
+  namespace = 'com.misykat.alarm.module'
   compileSdk = 34
 
   defaultConfig {
