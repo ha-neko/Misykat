@@ -15,7 +15,7 @@ import { AlarmIcon, AddIcon } from '../components/TabIcons';
 const typeColors = { Hadith: '#4C5A92', Surah: '#006B5E', Lecture: '#7B5800', Random: '#707973' };
 const USERNAME_KEY = 'app_username';
 
-function AlarmRow({ item, onToggle, onDelete, onEdit, index, colors, label }) {
+function AlarmRow({ item, onToggle, onDelete, onEdit, index, colors, label, s }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -42,25 +42,25 @@ function AlarmRow({ item, onToggle, onDelete, onEdit, index, colors, label }) {
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
       <TouchableOpacity
-        style={[styles.alarmCard, !enabled && styles.alarmDisabled]}
+        style={[s.alarmCard, !enabled && s.alarmDisabled]}
         onPress={() => onEdit(item)}
         onLongPress={() => onDelete(item.id)}
         activeOpacity={0.7}
       >
-        <View style={[styles.accentBar, { backgroundColor: enabled ? accentColor : colors.outlineVariant }]} />
-        <View style={styles.alarmContent}>
-          <View style={styles.alarmTop}>
-            <Text style={[styles.alarmTime, !enabled && styles.textMuted]}>
+        <View style={[s.accentBar, { backgroundColor: enabled ? accentColor : colors.outlineVariant }]} />
+        <View style={s.alarmContent}>
+          <View style={s.alarmTop}>
+            <Text style={[s.alarmTime, !enabled && s.textMuted]}>
               {formatTime(item.hour, item.minute)}
             </Text>
-            <View style={[styles.badge, { backgroundColor: accentColor + '18' }]}>
-              <View style={[styles.badgeDot, { backgroundColor: accentColor }]} />
-              <Text style={[styles.badgeText, { color: accentColor }]}>{label}</Text>
+            <View style={[s.badge, { backgroundColor: accentColor + '18' }]}>
+              <View style={[s.badgeDot, { backgroundColor: accentColor }]} />
+              <Text style={[s.badgeText, { color: accentColor }]}>{label}</Text>
             </View>
           </View>
-          {item.label ? <Text style={styles.alarmLabel}>{item.label}</Text> : null}
+          {item.label ? <Text style={s.alarmLabel}>{item.label}</Text> : null}
           {item.days && item.days.length > 0 && (
-            <Text style={styles.days}>{item.days.join(', ')}</Text>
+            <Text style={s.days}>{item.days.join(', ')}</Text>
           )}
         </View>
         <Switch
@@ -215,6 +215,7 @@ export default function HomeScreen({ navigation }) {
                 item={item}
                 index={index}
                 colors={colors}
+                s={s}
               label={t(lk)}
               onToggle={handleToggle}
               onDelete={handleDelete}
