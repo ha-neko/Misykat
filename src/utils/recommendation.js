@@ -14,6 +14,9 @@ const defaultProfile = {
   skippedTopics: [],
   morningCount: 0,
   totalInteractions: 0,
+  totalRecommended: 0,
+  totalEngaged: 0,
+  totalSkipped: 0,
   lastUpdated: null,
 };
 
@@ -38,6 +41,8 @@ export async function trackInteraction(content, action) {
   const hour = now.getHours();
 
   profile.totalInteractions++;
+  if (action === 'engaged') profile.totalEngaged++;
+  if (action === 'skipped') profile.totalSkipped++;
 
   if (hour >= 4 && hour <= 8) profile.morningCount++;
 
@@ -132,6 +137,9 @@ export async function getRecommendedContent(type) {
 
   scored.sort((a, b) => b.score - a.score);
   const chosen = scored[0].content;
+
+  profile.totalRecommended++;
+  await saveUserProfile(profile);
 
   return chosen;
 }

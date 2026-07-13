@@ -55,6 +55,9 @@ export const id = {
   contentPref: 'Preferensi Konten',
   contentHint: 'Semakin tinggi bar, semakin sering konten itu muncul',
   totalInteractions: 'Total Interaksi',
+  recommended: 'Direkomendasikan',
+  engaged: 'Didengarkan',
+  skipped: 'Dilewati',
   about: 'Tentang',
   aboutDesc: 'Misykat membantu Anda bangun dengan konten Islami yang inspiratif. Dilengkapi jadwal sholat, rekomendasi konten cerdas, dan audio Quran.',
 
@@ -155,6 +158,9 @@ export const en = {
   contentPref: 'Content Preference',
   contentHint: 'Higher bar means more frequent appearance',
   totalInteractions: 'Total Interactions',
+  recommended: 'Recommended',
+  engaged: 'Engaged',
+  skipped: 'Skipped',
   about: 'About',
   aboutDesc: 'Misykat helps you wake up with inspiring Islamic content. Includes prayer times, smart content recommendations, and Quran audio.',
 

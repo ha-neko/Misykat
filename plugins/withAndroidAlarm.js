@@ -198,6 +198,8 @@ public class AlarmReceiver extends BroadcastReceiver {
       savePendingAlarm(context, alarmId, contentType, isPrayer);
 
       showFullScreenNotification(context, alarmId, contentType, isPrayer);
+
+      launchAlarmActivity(context, alarmId, contentType, isPrayer);
     } catch (Exception e) {
       Log.e(TAG, "Failed to process alarm", e);
     } finally {
