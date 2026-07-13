@@ -109,16 +109,22 @@ function AppInner() {
     if (permDone) requestPermissions();
 
     getInitialAlarmData().then((data) => {
-      if (data && data.fromAlarm) {
-        pendingAlarm.current = data;
+      if (data && data.fromAlarm && navigationRef.current) {
+        navigationRef.current.navigate('AlarmRinging', {
+          contentType: data.contentType,
+          isPrayer: data.isPrayer,
+        });
       }
     });
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
         const data = response.notification.request.content.data;
-        if (data) {
-          pendingAlarm.current = data;
+        if (data && navigationRef.current) {
+          navigationRef.current.navigate('AlarmRinging', {
+            contentType: data.contentType,
+            isPrayer: data.isPrayer,
+          });
         }
       }
     });
