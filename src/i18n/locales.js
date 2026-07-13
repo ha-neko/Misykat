@@ -76,6 +76,8 @@ export const id = {
   asr: 'Ashar',
   maghrib: 'Maghrib',
   isha: 'Isya',
+  hijriDate: 'Tanggal Hijriah',
+  hijriToday: 'Hari ini',
 
   // AlarmRinging
   wakeUp: 'Waktunya Bangun!',
@@ -172,6 +174,8 @@ export const en = {
   asr: 'Asr',
   maghrib: 'Maghrib',
   isha: 'Isha',
+  hijriDate: 'Hijri Date',
+  hijriToday: 'Today',
 
   wakeUp: 'Time to Wake Up!',
   prayerTime: 'Prayer Time!',

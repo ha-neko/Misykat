@@ -68,6 +68,11 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
+      <View style={s.topDecoration}>
+        <View style={s.decoDot} />
+        <View style={s.decoDot} />
+        <View style={s.decoDot} />
+      </View>
       <View style={s.appBar}>
         <Text style={s.screenTitle}>{t('settings')}</Text>
         <AppLogo size={22} color={colors.primary} />
@@ -193,6 +198,12 @@ export default function SettingsScreen() {
 
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
+  topDecoration: {
+    flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 4, paddingBottom: 2,
+  },
+  decoDot: {
+    width: 4, height: 4, borderRadius: 2, backgroundColor: c.accent, opacity: 0.3,
+  },
   appBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,

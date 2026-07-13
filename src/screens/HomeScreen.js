@@ -11,6 +11,8 @@ import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 import { AlarmIcon, AddIcon } from '../components/TabIcons';
+import { getHijriDateString } from '../utils/hijri';
+import { CrescentIcon } from '../components/Icons';
 
 const typeColors = { Hadith: '#4C5A92', Surah: '#006B5E', Lecture: '#7B5800', Random: '#707973' };
 const USERNAME_KEY = 'app_username';
@@ -77,7 +79,7 @@ function AlarmRow({ item, onToggle, onDelete, onEdit, index, colors, label, s })
 
 export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
-  const { t } = useLocale();
+  const { t, lang } = useLocale();
   const [alarms, setAlarms] = useState([]);
   const [username, setUsername] = useState('');
   const logoAnim = useRef(new Animated.Value(0)).current;
@@ -158,6 +160,10 @@ export default function HomeScreen({ navigation }) {
           <View>
             <Text style={s.greeting}>{t('greeting')}{username ? `, ${username}` : ''}</Text>
             <Text style={s.title}>Misykat</Text>
+            <View style={s.hijriRow}>
+              <CrescentIcon color={colors.accent} size={10} />
+              <Text style={s.hijriDate}>{getHijriDateString(new Date(), lang)}</Text>
+            </View>
           </View>
           <Animated.View style={{ opacity: logoAnim.interpolate({
             inputRange: [0, 1], outputRange: [0.6, 1],
@@ -167,22 +173,30 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
+      <View style={s.topDecoration}>
+        <View style={s.decoDot} />
+        <View style={s.decoDot} />
+        <View style={s.decoDot} />
+      </View>
+
       {next && (
         <TouchableOpacity style={s.nextCard} activeOpacity={0.85}>
+          <View style={s.nextAccentBar} />
           <View style={s.nextContent}>
             <View style={s.nextLeft}>
               <Text style={s.nextLabel}>{t('nextAlarm')}</Text>
               <Text style={s.nextTime}>{formatTime24(next.hour, next.minute)}</Text>
               {next.label && <Text style={s.nextName}>{next.label}</Text>}
+              <View style={s.nextMeta}>
+                <View style={s.metaDot} />
+                <Text style={s.nextMetaText}>{t('alarmActive')}</Text>
+              </View>
             </View>
             <View style={s.nextRight}>
               <View style={s.nextIcon}>
                 <AlarmIcon color={colors.onPrimary} size={20} />
               </View>
             </View>
-          </View>
-          <View style={s.nextProgress}>
-            <View style={[s.nextProgressFill, { width: '0%' }]} />
           </View>
         </TouchableOpacity>
       )}
@@ -243,8 +257,14 @@ export default function HomeScreen({ navigation }) {
 
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
+  topDecoration: {
+    flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 8, paddingBottom: 4,
+  },
+  decoDot: {
+    width: 4, height: 4, borderRadius: 2, backgroundColor: c.accent, opacity: 0.3,
+  },
   header: {
-    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8,
+    paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4,
     backgroundColor: c.surface,
     borderBottomWidth: 1, borderBottomColor: c.borderLight,
   },
@@ -253,44 +273,52 @@ const makeStyles = (c) => StyleSheet.create({
   },
   greeting: { fontSize: 13, color: c.primary, fontWeight: '500', letterSpacing: 0.3 },
   title: { fontSize: 28, fontWeight: '700', color: c.onSurface, marginTop: 2, letterSpacing: -0.3 },
+  hijriRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  hijriDate: { fontSize: 11, color: c.accent, fontWeight: '600', letterSpacing: 0.3 },
   nextCard: {
-    marginHorizontal: 16, marginTop: 12, backgroundColor: c.primary, borderRadius: 16, overflow: 'hidden',
+    marginHorizontal: 16, marginTop: 8, marginBottom: 8,
+    backgroundColor: c.primary, borderRadius: 18, overflow: 'hidden',
     ...Platform.select({
       ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8 },
       android: { elevation: 4 },
     }),
   },
+  nextAccentBar: {
+    width: 50, height: 3, backgroundColor: c.accent, borderBottomRightRadius: 2,
+  },
   nextContent: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16,
+    padding: 16, paddingTop: 14,
   },
   nextLeft: { flex: 1 },
-  nextLabel: { fontSize: 11, color: c.onPrimary, fontWeight: '600', letterSpacing: 1, opacity: 0.7, marginBottom: 4 },
+  nextLabel: { fontSize: 10, color: c.onPrimary, fontWeight: '700', letterSpacing: 1.5, opacity: 0.7, marginBottom: 4 },
   nextTime: { fontSize: 32, fontWeight: '700', color: c.onPrimary, letterSpacing: -1, fontVariant: ['tabular-nums'] },
   nextName: { fontSize: 13, color: c.onPrimary, marginTop: 2, opacity: 0.85 },
+  nextMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  metaDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.onPrimary, opacity: 0.4 },
+  nextMetaText: { fontSize: 10, color: c.onPrimary, opacity: 0.6, fontWeight: '500' },
   nextRight: { marginLeft: 12 },
   nextIcon: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: c.onPrimary + '20', justifyContent: 'center', alignItems: 'center',
   },
-  nextProgress: { height: 3, backgroundColor: c.onPrimary + '20' },
-  nextProgressFill: { height: '100%', backgroundColor: c.onPrimary, borderRadius: 2 },
-  list: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 8 },
+  list: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 4 },
   alarmCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: c.surface, borderRadius: 16, marginBottom: 10, overflow: 'hidden',
+    borderWidth: 1, borderColor: c.borderLight,
     ...Platform.select({
-      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 },
+      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 1 },
     }),
   },
-  alarmDisabled: { opacity: 0.45 },
+  alarmDisabled: { opacity: 0.4 },
   accentBar: { width: 4, alignSelf: 'stretch', borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
-  alarmContent: { flex: 1, paddingVertical: 14, paddingLeft: 12 },
+  alarmContent: { flex: 1, paddingVertical: 12, paddingLeft: 12 },
   alarmTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  alarmTime: { fontSize: 28, fontWeight: '700', color: c.onSurface, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
+  alarmTime: { fontSize: 26, fontWeight: '700', color: c.onSurface, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   textMuted: { color: c.onSurfaceVariant },
-  alarmLabel: { fontSize: 13, color: c.onSurfaceVariant, marginTop: 2 },
+  alarmLabel: { fontSize: 13, color: c.onSurfaceVariant, marginTop: 3 },
   days: { fontSize: 11, color: c.outline, marginTop: 2 },
   badge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -319,11 +347,12 @@ const makeStyles = (c) => StyleSheet.create({
   },
   emptyBtnText: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
   fab: {
-    position: 'absolute', right: 20, bottom: 20,
+    position: 'absolute', right: 20, bottom: 24,
   },
   fabSurface: {
-    width: 56, height: 56, borderRadius: 16,
+    width: 56, height: 56, borderRadius: 18,
     backgroundColor: c.primaryContainer, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: c.primary + '30',
     ...Platform.select({
       ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
       android: { elevation: 6 },
