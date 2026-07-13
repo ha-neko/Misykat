@@ -16,6 +16,8 @@ Notifications.setNotificationHandler({
   }),
 });
 
+
+
 async function setupChannel() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('alarm', {

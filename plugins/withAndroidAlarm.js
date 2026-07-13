@@ -135,8 +135,8 @@ function patchAppBuildGradle(projectRoot) {
         abi {
             enable true
             reset()
-            include 'armeabi-v7a', 'arm64-v8a'
-            universalApk false
+            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            universalApk true
         }
     }`
   );
