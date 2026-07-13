@@ -14,7 +14,7 @@ import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PermissionScreen from './src/screens/PermissionScreen';
 import { requestPermissions } from './src/utils/notifications';
-import { getInitialAlarmData, checkPendingAlarm } from './src/utils/nativeAlarm';
+import { getInitialAlarmData, checkPendingAlarm, canScheduleExactAlarm } from './src/utils/nativeAlarm';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider, useLocale } from './src/i18n/LanguageContext';
@@ -93,7 +93,19 @@ function AppInner() {
   const navigationRef = useRef(null);
   const [navReady, setNavReady] = useState(false);
   const [permDone, setPermDone] = useState(false);
+  const [checking, setChecking] = useState(true);
   const pendingAlarm = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      const notif = await Notifications.getPermissionsAsync();
+      const exact = await canScheduleExactAlarm();
+      if (notif.granted && exact) {
+        setPermDone(true);
+      }
+      setChecking(false);
+    })();
+  }, []);
 
   useEffect(() => {
     Notifications.setNotificationHandler({
@@ -196,6 +208,14 @@ function AppInner() {
       pendingAlarm.current = null;
     }
   }, [navReady, permDone]);
+
+  if (checking) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+      </SafeAreaProvider>
+    );
+  }
 
   if (!permDone) {
     return (
