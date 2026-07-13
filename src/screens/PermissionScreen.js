@@ -30,8 +30,8 @@ const PERMISSION_STEPS = [
   },
   {
     key: 'fsi',
-    title: 'Izin Layar Penuh',
-    description: 'Agar alarm muncul di layar kunci dan menimpa aplikasi lain',
+    title: 'Izin Layar Penuh (Opsional)',
+    description: 'Agar alarm muncul di layar kunci (tidak wajib — alarm sudah pakai gaya panggilan WhatsApp)',
     note: 'Jika tombol tidak merespon, buka Setelan > Aplikasi > Misykat > Alarm & Pengingat & izinkan',
   },
   {
@@ -142,14 +142,14 @@ export default function PermissionScreen({ onDone }) {
   }
 
   function handleContinue() {
-    if (!permissions.notif || !permissions.exact || !permissions.fsi) {
+    if (!permissions.notif || !permissions.exact) {
       Alert.alert(t('permissionRequired'), t('grantAllPermissions'));
       return;
     }
     onDone();
   }
 
-  const allGranted = permissions.notif && permissions.exact && permissions.fsi;
+  const allGranted = permissions.notif && permissions.exact;
 
   const s = makeStyles(colors);
 
