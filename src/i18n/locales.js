@@ -70,7 +70,7 @@ export const id = {
   refreshLocation: 'Perbarui Lokasi',
   locationError: 'Gagal mendapatkan lokasi',
   locationPermError: 'Izin lokasi diperlukan',
-  alarmEnabled: 'Alarm sholat diaktifkan',
+  alarmEnabled: 'Alarm sholat aktif',
   alarmEnableFailed: 'Gagal mengaktifkan alarm',
   // Prayer names
   fajr: 'Subuh',

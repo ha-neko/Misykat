@@ -86,32 +86,19 @@ export async function scheduleAlarm(alarmData) {
 export async function schedulePrayerAlarms(prayerTimes) {
   const existing = await getPrayerAlarms();
   for (const prayer of existing) {
-    await Notifications.cancelScheduledNotificationAsync(prayer.id);
+    await cancelNativeAlarm(prayer.id);
   }
 
-  await setupChannel();
   const prayerAlarms = [];
 
   for (const [key, time] of Object.entries(prayerTimes)) {
     if (key === 'sunrise') continue;
 
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `Waktu Sholat ${capitalize(key)}`,
-        body: `Sudah masuk waktu sholat ${capitalize(key)}. Segera tunaikan!`,
-        data: { prayer: key, isPrayer: true },
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        channelId: 'alarm',
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: time.getHours(),
-        minute: time.getMinutes(),
-      },
-    });
+    const alarmId = `prayer_${key}`;
+    await scheduleNativeAlarm(time.getHours(), time.getMinutes(), alarmId, key, true);
 
     prayerAlarms.push({
-      id: notificationId,
+      id: alarmId,
       prayer: key,
       hour: time.getHours(),
       minute: time.getMinutes(),
@@ -123,8 +110,12 @@ export async function schedulePrayerAlarms(prayerTimes) {
   return prayerAlarms;
 }
 
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+export async function cancelPrayerAlarms() {
+  const existing = await getPrayerAlarms();
+  for (const prayer of existing) {
+    await cancelNativeAlarm(prayer.id);
+  }
+  await AsyncStorage.removeItem(PRAYER_ALARMS_KEY);
 }
 
 export async function getAlarms() {

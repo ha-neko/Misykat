@@ -160,6 +160,7 @@ import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -310,6 +311,12 @@ public class AlarmReceiver extends BroadcastReceiver {
       PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
     );
 
+    Bundle data = new Bundle();
+    if (alarmId != null) data.putString("alarmId", alarmId);
+    if (contentType != null) data.putString("contentType", contentType);
+    data.putBoolean("isPrayer", isPrayer);
+    data.putBoolean("fromAlarm", true);
+
     Notification notification = new Notification.Builder(context, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_dialog_alert)
       .setContentTitle("Misykat")
@@ -321,6 +328,7 @@ public class AlarmReceiver extends BroadcastReceiver {
       .setOngoing(true)
       .setVisibility(Notification.VISIBILITY_PUBLIC)
       .setDefaults(Notification.DEFAULT_ALL)
+      .setExtras(data)
       .build();
 
     notificationManager.notify(requestCode, notification);

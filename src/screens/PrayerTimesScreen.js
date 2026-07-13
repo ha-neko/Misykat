@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { calculatePrayerTimes, formatPrayerTime, prayerOrder } from '../utils/prayerTimes';
 import { getHijriDateString } from '../utils/hijri';
-import { schedulePrayerAlarms } from '../utils/notifications';
+import { schedulePrayerAlarms, cancelPrayerAlarms, getPrayerAlarms } from '../utils/notifications';
 import AppLogo from '../components/AppLogo';
 import { SunriseIcon, SunIcon, SunsetIcon, CrescentIcon, StarIcon } from '../components/Icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -36,7 +36,12 @@ export default function PrayerTimesScreen() {
   const [error, setError] = useState(null);
   const [fadeIn] = useState(new Animated.Value(0));
 
-  useEffect(() => { getLocation(); }, []);
+  useEffect(() => { loadAlarmState(); getLocation(); }, []);
+
+  async function loadAlarmState() {
+    const alarms = await getPrayerAlarms();
+    setAlarmActive(alarms.length > 0);
+  }
 
   useEffect(() => {
     if (!loading && prayerTimes) {
@@ -67,9 +72,13 @@ export default function PrayerTimesScreen() {
   async function handleEnable() {
     if (!prayerTimes) return;
     try {
-      await schedulePrayerAlarms(prayerTimes);
-      setAlarmActive(true);
-      Alert.alert(t('success'), t('alarmEnabled'));
+      if (alarmActive) {
+        await cancelPrayerAlarms();
+        setAlarmActive(false);
+      } else {
+        await schedulePrayerAlarms(prayerTimes);
+        setAlarmActive(true);
+      }
     } catch {
       Alert.alert(t('error'), t('alarmEnableFailed'));
     }
