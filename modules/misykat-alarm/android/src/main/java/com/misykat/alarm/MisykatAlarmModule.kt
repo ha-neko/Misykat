@@ -80,7 +80,6 @@ class MisykatAlarmModule : Module() {
     val intent = Intent().apply {
       action = "com.misykat.ALARM"
       setPackage(context.packageName)
-      component = android.content.ComponentName(context.packageName, "${context.packageName}.AlarmReceiver")
       putExtra("alarmId", alarmId)
       putExtra("contentType", contentType)
       putExtra("isPrayer", isPrayer)
@@ -123,7 +122,6 @@ class MisykatAlarmModule : Module() {
     val intent = Intent().apply {
       action = "com.misykat.ALARM"
       setPackage(context.packageName)
-      component = android.content.ComponentName(context.packageName, "${context.packageName}.AlarmReceiver")
     }
 
     val pendingIntent = PendingIntent.getBroadcast(
