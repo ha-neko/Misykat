@@ -230,9 +230,6 @@ public class AlarmReceiver extends BroadcastReceiver {
         Intent.FLAG_ACTIVITY_SINGLE_TOP |
         Intent.FLAG_ACTIVITY_CLEAR_TOP
       );
-      if (Build.VERSION.SDK_INT >= 27) {
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_TURN_SCREEN_ON);
-      }
       if (alarmId != null) launchIntent.putExtra("alarmId", alarmId);
       if (contentType != null) launchIntent.putExtra("contentType", contentType);
       launchIntent.putExtra("isPrayer", isPrayer);
