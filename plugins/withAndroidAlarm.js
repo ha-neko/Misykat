@@ -198,8 +198,6 @@ public class AlarmReceiver extends BroadcastReceiver {
       savePendingAlarm(context, alarmId, contentType, isPrayer);
 
       showFullScreenNotification(context, alarmId, contentType, isPrayer);
-
-      launchAlarmActivity(context, alarmId, contentType, isPrayer);
     } catch (Exception e) {
       Log.e(TAG, "Failed to process alarm", e);
     } finally {
@@ -215,6 +213,7 @@ public class AlarmReceiver extends BroadcastReceiver {
       AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
       if (am != null) {
         am.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+        am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0);
         am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
       }
     } catch (Exception e) {
