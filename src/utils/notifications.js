@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, PermissionsAndroid } from 'react-native';
 import { scheduleNativeAlarm, cancelNativeAlarm } from './nativeAlarm';
+import { getAudioForContent } from './audioSources';
+import { getCachedAudio } from './cacheManager';
 
 const ALARMS_KEY = 'alarms';
 const PRAYER_ALARMS_KEY = 'prayerAlarms';
@@ -66,6 +68,8 @@ export async function scheduleAlarm(alarmData) {
   const alarmId = Date.now().toString();
   await scheduleNativeAlarm(hour, minute, alarmId, contentType, false);
 
+  preloadAudio(contentType);
+
   const alarm = {
     id: alarmId,
     hour,
@@ -83,6 +87,15 @@ export async function scheduleAlarm(alarmData) {
   return alarm;
 }
 
+function preloadAudio(contentType, isPrayer = false) {
+  const typeMap = { hadith: 'Hadith', surah: 'Surah', ceramah: 'Ceramah', random: 'Random' };
+  const dummy = isPrayer ? { type: 'Adhan' } : { type: typeMap[contentType] || 'Random' };
+  const src = getAudioForContent(dummy, isPrayer);
+  if (src) {
+    getCachedAudio(src.cacheKey, src.url).catch(() => {});
+  }
+}
+
 export async function schedulePrayerAlarms(prayerTimes) {
   const existing = await getPrayerAlarms();
   for (const prayer of existing) {
@@ -96,6 +109,8 @@ export async function schedulePrayerAlarms(prayerTimes) {
 
     const alarmId = `prayer_${key}`;
     await scheduleNativeAlarm(time.getHours(), time.getMinutes(), alarmId, key, true);
+
+    preloadAudio('random', true);
 
     prayerAlarms.push({
       id: alarmId,

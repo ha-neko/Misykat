@@ -88,8 +88,8 @@ export const id = {
   prayNow: 'Segera tunaikan sholat!',
   loading: 'Memuat...',
   playing: 'Memutar...',
-  streamFailed: 'Streaming gagal, cari cache...',
-  usingTTS: 'Gunakan suara lokal...',
+  streamFailed: 'Memuat audio...',
+
   snooze: 'Tunda',
   dismiss: 'Matikan',
 
@@ -188,8 +188,7 @@ export const en = {
   prayNow: 'Time to pray!',
   loading: 'Loading...',
   playing: 'Playing...',
-  streamFailed: 'Stream failed, searching cache...',
-  usingTTS: 'Using local voice...',
+  streamFailed: 'Loading audio...',
   snooze: 'Snooze',
   dismiss: 'Dismiss',
 

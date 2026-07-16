@@ -238,7 +238,13 @@ public class AlarmReceiver extends BroadcastReceiver {
       launchIntent.putExtra("fromAlarmReceiver", true);
       launchIntent.putExtra("directLaunch", true);
 
-      context.startActivity(launchIntent);
+      PendingIntent pi = PendingIntent.getActivity(
+        context,
+        (alarmId != null ? alarmId.hashCode() : 9001) + 1000,
+        launchIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+      );
+      pi.send();
     } catch (Exception e) {
       Log.e(TAG, "Direct activity launch failed", e);
     }

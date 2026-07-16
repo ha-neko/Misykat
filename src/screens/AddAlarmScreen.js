@@ -1,12 +1,91 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal, TextInput, Platform,
+  View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal, TextInput, Platform, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { scheduleAlarm } from '../utils/notifications';
 import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon } from '../components/Icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
+
+function TimePicker({ hour, minute, onChange, st }) {
+  const [editing, setEditing] = useState(null);
+  const [editVal, setEditVal] = useState('');
+
+  function inc(n, set, max) { set(v => (v + 1) % max); }
+  function dec(n, set, max) { set(v => (v - 1 + max) % max); }
+
+  function startEdit(field) {
+    setEditing(field);
+    setEditVal(field === 'hour' ? hour.toString() : minute.toString().padStart(2, '0'));
+  }
+
+  function finishEdit() {
+    const val = parseInt(editVal, 10);
+    if (!isNaN(val)) {
+      if (editing === 'hour') onChange(Math.max(0, Math.min(23, val)), minute);
+      else onChange(hour, Math.max(0, Math.min(59, val)));
+    }
+    setEditing(null);
+    Keyboard.dismiss();
+  }
+
+  return (
+    <View style={st.pickerRow}>
+      <View style={st.pickerCol}>
+        <TouchableOpacity onPress={() => inc(hour, (v) => onChange(v, minute), 24)} style={st.arrow}>
+          <Text style={st.arrowText}>▲</Text>
+        </TouchableOpacity>
+        {editing === 'hour' ? (
+          <TextInput
+            style={st.pickerInput}
+            value={editVal}
+            onChangeText={setEditVal}
+            keyboardType="number-pad"
+            selectTextOnFocus
+            autoFocus
+            onBlur={finishEdit}
+            onSubmitEditing={finishEdit}
+            maxLength={2}
+          />
+        ) : (
+          <TouchableOpacity onPress={() => startEdit('hour')}>
+            <Text style={st.pickerValue}>{hour.toString().padStart(2, '0')}</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={() => dec(hour, (v) => onChange(v, minute), 24)} style={st.arrow}>
+          <Text style={st.arrowText}>▼</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={st.pickerSep}>:</Text>
+      <View style={st.pickerCol}>
+        <TouchableOpacity onPress={() => inc(minute, (v) => onChange(hour, v), 60)} style={st.arrow}>
+          <Text style={st.arrowText}>▲</Text>
+        </TouchableOpacity>
+        {editing === 'minute' ? (
+          <TextInput
+            style={st.pickerInput}
+            value={editVal}
+            onChangeText={setEditVal}
+            keyboardType="number-pad"
+            selectTextOnFocus
+            autoFocus
+            onBlur={finishEdit}
+            onSubmitEditing={finishEdit}
+            maxLength={2}
+          />
+        ) : (
+          <TouchableOpacity onPress={() => startEdit('minute')}>
+            <Text style={st.pickerValue}>{minute.toString().padStart(2, '0')}</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={() => dec(minute, (v) => onChange(hour, v), 60)} style={st.arrow}>
+          <Text style={st.arrowText}>▼</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 export default function AddAlarmScreen({ navigation, route }) {
   const { colors } = useTheme();
@@ -35,9 +114,6 @@ export default function AddAlarmScreen({ navigation, route }) {
     }
   }
 
-  function inc(n, set, max) { set(v => (v + 1) % max); }
-  function dec(n, set, max) { set(v => (v - 1 + max) % max); }
-
   const s = makeStyles(colors);
 
   return (
@@ -53,27 +129,7 @@ export default function AddAlarmScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.section}>
           <Text style={s.sectionLabel}>{t('time')}</Text>
-          <View style={s.pickerRow}>
-            <View style={s.pickerCol}>
-              <TouchableOpacity onPress={() => inc(hour, setHour, 24)} style={s.arrow}>
-                <Text style={s.arrowText}>▲</Text>
-              </TouchableOpacity>
-              <Text style={s.pickerValue}>{hour.toString().padStart(2, '0')}</Text>
-              <TouchableOpacity onPress={() => dec(hour, setHour, 24)} style={s.arrow}>
-                <Text style={s.arrowText}>▼</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={s.pickerSep}>:</Text>
-            <View style={s.pickerCol}>
-              <TouchableOpacity onPress={() => inc(minute, setMinute, 60)} style={s.arrow}>
-                <Text style={s.arrowText}>▲</Text>
-              </TouchableOpacity>
-              <Text style={s.pickerValue}>{minute.toString().padStart(2, '0')}</Text>
-              <TouchableOpacity onPress={() => dec(minute, setMinute, 60)} style={s.arrow}>
-                <Text style={s.arrowText}>▼</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TimePicker hour={hour} minute={minute} onChange={(h, m) => { setHour(h); setMinute(m); }} st={s} />
         </View>
 
         <View style={s.section}>
@@ -177,6 +233,11 @@ const makeStyles = (c) => StyleSheet.create({
   pickerValue: {
     fontSize: 48, fontWeight: '300', color: c.onSurface, marginVertical: 4,
     fontVariant: ['tabular-nums'],
+  },
+  pickerInput: {
+    fontSize: 48, fontWeight: '300', color: c.onSurface,
+    fontVariant: ['tabular-nums'], width: '100%', textAlign: 'center',
+    padding: 0, margin: 0, height: 56,
   },
   pickerSep: { fontSize: 48, fontWeight: '300', color: c.outline, marginHorizontal: 4, marginTop: -4 },
   labelBtn: {

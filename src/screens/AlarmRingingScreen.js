@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated, Platform,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
 import AppLogo from '../components/AppLogo';
 import { getAudioForContent } from '../utils/audioSources';
@@ -30,7 +29,6 @@ export default function AlarmRingingScreen({ route, navigation }) {
     startPulse();
     return () => {
       if (sound) sound.unloadAsync();
-      Speech.stop();
     };
   }, []);
 
@@ -55,16 +53,9 @@ export default function AlarmRingingScreen({ route, navigation }) {
     setAudioInfo(firstSrc);
 
     const sources = [firstSrc];
-    if (c.type === 'Surah') {
-      for (let i = 0; i < 4; i++) {
-        const alt = getAudioForContent(c, isPrayer);
-        if (alt && alt.cacheKey !== firstSrc.cacheKey) sources.push(alt);
-      }
-    } else {
-      for (let i = 0; i < 2; i++) {
-        const alt = getAudioForContent(c, isPrayer);
-        if (alt && alt.cacheKey !== firstSrc.cacheKey) sources.push(alt);
-      }
+    for (let i = 0; i < 3; i++) {
+      const alt = getAudioForContent(c, isPrayer);
+      if (alt && alt.cacheKey !== firstSrc.cacheKey) sources.push(alt);
     }
 
     try {
@@ -78,44 +69,24 @@ export default function AlarmRingingScreen({ route, navigation }) {
     for (const src of sources) {
       try {
         setAudioInfo(src);
+        let uri = src.url;
+        try {
+          const cached = await getCachedAudio(src.cacheKey, src.url);
+          if (cached) uri = cached.uri;
+        } catch {}
         setAudioStatus(t('playing'));
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: src.url },
+          { uri },
           { shouldPlay: true, isLooping: isPrayer, volume: 1.0 }
         );
         setSound(newSound);
-        getCachedAudio(src.cacheKey, src.url).catch(() => {});
         setAudioStatus('');
         setIsLoading(false);
         return;
       } catch {}
     }
 
-    try {
-      setAudioStatus(t('streamFailed'));
-      const src = sources[0];
-      const cached = await getCachedAudio(src.cacheKey, src.url);
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: cached.uri },
-        { shouldPlay: true, isLooping: isPrayer, volume: 1.0 }
-      );
-      setSound(newSound);
-      setAudioStatus('');
-    } catch {
-      try {
-        setAudioStatus(t('usingTTS'));
-        const fb = getAudioForContent(c, isPrayer)?.fallback;
-        if (fb?.text) {
-          Speech.speak(fb.text, {
-            language: fb.lang === 'ar' ? 'ar' : 'id-ID',
-            rate: 0.85,
-            pitch: 1.0,
-          });
-        }
-      } catch {}
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   }
 
   async function stopAlarm() {
@@ -123,7 +94,6 @@ export default function AlarmRingingScreen({ route, navigation }) {
       setInteractionTracked(true);
       trackInteraction(content, 'engaged');
     }
-    Speech.stop();
     if (sound) {
       await sound.stopAsync();
       await sound.unloadAsync();
@@ -136,7 +106,6 @@ export default function AlarmRingingScreen({ route, navigation }) {
       setInteractionTracked(true);
       trackInteraction(content, 'skipped');
     }
-    Speech.stop();
     if (sound) {
       await sound.stopAsync();
       await sound.unloadAsync();
