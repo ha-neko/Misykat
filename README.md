@@ -37,10 +37,10 @@
 
 | Package | Link |
 |---------|------|
-| **Universal APK** (all devices) | [⬇️ Download Latest](https://github.com/ha-neko/Misykat/releases/latest/download/Misykat-Universal-Release.apk) |
-| arm64-v8a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/latest/download/app-arm64-v8a-release.apk) |
-| armeabi-v7a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/latest/download/app-armeabi-v7a-release.apk) |
-| x86_64 APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/latest/download/app-x86_64-release.apk) |
+| **Universal APK** (all devices) | [⬇️ Download Nightly](https://github.com/ha-neko/Misykat/releases/download/nightly/Misykat-Universal-Release.apk) |
+| arm64-v8a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-arm64-v8a-release.apk) |
+| armeabi-v7a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-armeabi-v7a-release.apk) |
+| x86_64 APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-x86_64-release.apk) |
 
 > Semua build otomatis oleh GitHub Actions setiap push ke `main`. Tidak perlu login — langsung download.
 

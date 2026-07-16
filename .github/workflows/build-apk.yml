@@ -72,8 +72,9 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          tag: latest
-          name: Latest Build
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: nightly
+          name: Nightly Build
           body: |
             Build otomatis dari commit `${{ github.sha }}`.
 
@@ -87,3 +88,4 @@ jobs:
             android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
             android/app/build/outputs/apk/release/app-x86_64-release.apk
           artifactContentType: application/vnd.android.package-archive
+          removeArtifacts: true
