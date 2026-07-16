@@ -73,15 +73,19 @@ jobs:
           retention-days: 30
 
       - name: Create Release
-        run: |
-          gh release delete nightly --cleanup-tag --yes 2>/dev/null || true
-          gh release create nightly \
-            --title "Nightly Build ($(date +%Y-%m-%d))" \
-            --notes "Build otomatis dari commit \`${{ github.sha }}\`. APK siap di-sideload langsung tanpa perlu login." \
-            --prerelease \
-            android/app/build/outputs/apk/release/app-universal-release.apk \
-            android/app/build/outputs/apk/release/app-arm64-v8a-release.apk \
-            android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk \
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: nightly
+          name: Nightly Build (${{ github.ref_name }})
+          body: |
+            Build otomatis dari commit `${{ github.sha }}`.
+
+            APK siap di-sideload langsung tanpa perlu login.
+          prerelease: true
+          fail_on_unmatched_glob: false
+          files: |
+            android/app/build/outputs/apk/release/app-universal-release.apk
+            android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
             android/app/build/outputs/apk/release/app-x86_64-release.apk
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
