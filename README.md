@@ -37,7 +37,7 @@
 
 | Package | Link |
 |---------|------|
-| **Universal APK** (all devices) | [⬇️ Download Nightly](https://github.com/ha-neko/Misykat/releases/download/nightly/Misykat-Universal-Release.apk) |
+| **Universal APK** (all devices) | [⬇️ Download Nightly](https://github.com/ha-neko/Misykat/releases/download/nightly/app-universal-release.apk) |
 | arm64-v8a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-arm64-v8a-release.apk) |
 | armeabi-v7a APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-armeabi-v7a-release.apk) |
 | x86_64 APK | [⬇️ Download](https://github.com/ha-neko/Misykat/releases/download/nightly/app-x86_64-release.apk) |
