@@ -165,11 +165,13 @@ export default function HomeScreen({ navigation }) {
               <Text style={s.hijriDate}>{getHijriDateString(new Date(), lang)}</Text>
             </View>
           </View>
-          <Animated.View style={{ opacity: logoAnim.interpolate({
-            inputRange: [0, 1], outputRange: [0.6, 1],
-          })}}>
-            <AppLogo size={28} color={colors.primary} />
-          </Animated.View>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+            <Animated.View style={{ opacity: logoAnim.interpolate({
+              inputRange: [0, 1], outputRange: [0.6, 1],
+            })}}>
+              <AppLogo size={40} color={colors.primary} />
+            </Animated.View>
+          </TouchableOpacity>
         </View>
       </View>
 

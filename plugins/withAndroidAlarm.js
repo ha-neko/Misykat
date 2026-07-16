@@ -308,7 +308,10 @@ public class MisykatAlarmService extends Service {
     forceRingerNormal();
     showForegroundNotification();
     showAlarmNotification(alarmId, contentType, isPrayer);
-    launchAlarmActivity(alarmId, contentType, isPrayer);
+
+    new android.os.Handler(getMainLooper()).postDelayed(() -> {
+      launchAlarmActivity(alarmId, contentType, isPrayer);
+    }, 200);
 
     new android.os.Handler(getMainLooper()).postDelayed(() -> {
       releaseWakeLock();
@@ -378,11 +381,7 @@ public class MisykatAlarmService extends Service {
       i.putExtra("isPrayer", isPrayer);
       i.putExtra("fromAlarmReceiver", true);
       i.putExtra("directLaunch", true);
-
-      PendingIntent pi = PendingIntent.getActivity(this,
-        (alarmId != null ? alarmId.hashCode() : 9001) + 1000, i,
-        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-      pi.send();
+      startActivity(i);
     } catch (Exception e) {
       Log.e(TAG, "launch failed", e);
     }

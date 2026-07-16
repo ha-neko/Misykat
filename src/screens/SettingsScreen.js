@@ -132,15 +132,15 @@ export default function SettingsScreen() {
           <View style={s.divider} />
 
           <View style={s.row}>
-            <Text style={s.rowLabel}>{t('language')}</Text>
-            <TouchableOpacity
-              onPress={() => setLanguage(lang === 'id' ? 'en' : 'id')}
-              style={s.langBtn}
-              activeOpacity={0.7}
-            >
-              <Text style={s.langText}>{lang === 'id' ? 'Indonesia' : 'English'}</Text>
-              <Text style={s.arrow}>→</Text>
-            </TouchableOpacity>
+            <View style={s.rowLeft}>
+              <Text style={s.rowLabel}>{t('language')}</Text>
+            </View>
+            <Switch
+              value={lang === 'en'}
+              onValueChange={(v) => setLanguage(v ? 'en' : 'id')}
+              trackColor={{ false: colors.outlineVariant, true: colors.primaryContainer }}
+              thumbColor={lang === 'en' ? colors.primary : colors.onSurfaceVariant}
+            />
           </View>
         </View>
 

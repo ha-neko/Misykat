@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal, TextInput, Platform, Keyboard,
 } from 'react-native';
@@ -12,15 +12,20 @@ import { useLocale } from '../i18n/LanguageContext';
 
 function HoldArrow({ onStep, children, st }) {
   const timer = useRef(null);
-  const onPressIn = useCallback(() => {
-    onStep();
-    timer.current = setInterval(onStep, 120);
-  }, [onStep]);
-  const onPressOut = useCallback(() => {
+  const onStepRef = useRef(onStep);
+  useEffect(() => { onStepRef.current = onStep; }, [onStep]);
+
+  const handlePressIn = () => {
+    onStepRef.current();
+    timer.current = setInterval(() => onStepRef.current(), 120);
+  };
+
+  const handlePressOut = () => {
     if (timer.current) { clearInterval(timer.current); timer.current = null; }
-  }, []);
+  };
+
   return (
-    <TouchableOpacity onPress={onStep} onPressIn={onPressIn} onPressOut={onPressOut} style={st.arrow}>
+    <TouchableOpacity onPress={onStep} onPressIn={handlePressIn} onPressOut={handlePressOut} style={st.arrow}>
       {children}
     </TouchableOpacity>
   );
