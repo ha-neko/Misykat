@@ -11,7 +11,7 @@ import { getUserProfile } from '../utils/recommendation';
 import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
-import { SunIcon, CrescentIcon } from '../components/Icons';
+import { SunIcon, CrescentIcon, GlobeIcon } from '../components/Icons';
 
 const USERNAME_KEY = 'app_username';
 
@@ -133,7 +133,13 @@ export default function SettingsScreen() {
 
           <View style={s.row}>
             <View style={s.rowLeft}>
-              <Text style={s.rowLabel}>{t('language')}</Text>
+              <View style={s.iconWrap}>
+                <GlobeIcon color={colors.primary} size={18} />
+              </View>
+              <View>
+                <Text style={s.rowLabel}>{t('language')}</Text>
+                <Text style={s.rowHint}>{lang === 'id' ? 'Indonesia' : 'English'}</Text>
+              </View>
             </View>
             <Switch
               value={lang === 'en'}

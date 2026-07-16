@@ -100,3 +100,13 @@ export function StarIcon({ color = '#707973', size = 16 }) {
     </Svg>
   );
 }
+
+export function GlobeIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.5" />
+      <Path d="M3.6 9h16.8M3.6 15h16.8" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M12 3a15 15 0 010 18 15 15 0 010-18z" stroke={color} strokeWidth="1.5" />
+    </Svg>
+  );
+}
