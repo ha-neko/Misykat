@@ -4,8 +4,8 @@
   <h3 align="center">مشكاة</h3>
   <p align="center">Aplikasi alarm Islami dengan auto-open di lock screen, streaming audio, adhan, dan jadwal sholat</p>
   <p align="center">
-    <a href="https://github.com/ha-neko/Misykat/releases/latest">
-      <img src="https://img.shields.io/github/v/release/ha-neko/Misykat?label=Release&color=2196F3"/>
+    <a href="https://github.com/ha-neko/Misykat/releases/tag/nightly">
+      <img src="https://img.shields.io/github/v/release/ha-neko/Misykat?label=Release&color=2196F3&include_prereleases"/>
     </a>
     <a href="https://github.com/ha-neko/Misykat/actions/workflows/build-apk.yml">
       <img src="https://img.shields.io/github/actions/workflow/status/ha-neko/Misykat/build-apk.yml?branch=main&label=Build"/>
