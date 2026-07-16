@@ -13,7 +13,7 @@ import PrayerTimesScreen from './src/screens/PrayerTimesScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PermissionScreen from './src/screens/PermissionScreen';
-import { requestPermissions } from './src/utils/notifications';
+import { requestPermissions, getAlarmById } from './src/utils/notifications';
 import { getInitialAlarmData, checkPendingAlarm, canScheduleExactAlarm } from './src/utils/nativeAlarm';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
@@ -96,6 +96,20 @@ function AppInner() {
   const [checking, setChecking] = useState(true);
   const pendingAlarm = useRef(null);
 
+  async function goToAlarm(data) {
+    if (!data || !data.fromAlarm || !navigationRef.current) return;
+    let customSound = null;
+    if (data.alarmId) {
+      const alarm = await getAlarmById(data.alarmId);
+      if (alarm) customSound = alarm.customSound;
+    }
+    navigationRef.current.navigate('AlarmRinging', {
+      contentType: data.contentType,
+      isPrayer: data.isPrayer,
+      customSound,
+    });
+  }
+
   useEffect(() => {
     (async () => {
       const notif = await Notifications.getPermissionsAsync();
@@ -120,24 +134,11 @@ function AppInner() {
 
     if (permDone) requestPermissions();
 
-    getInitialAlarmData().then((data) => {
-      if (data && data.fromAlarm && navigationRef.current) {
-        navigationRef.current.navigate('AlarmRinging', {
-          contentType: data.contentType,
-          isPrayer: data.isPrayer,
-        });
-      }
-    });
+    getInitialAlarmData().then(goToAlarm);
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
-        const data = response.notification.request.content.data;
-        if (data && navigationRef.current) {
-          navigationRef.current.navigate('AlarmRinging', {
-            contentType: data.contentType,
-            isPrayer: data.isPrayer,
-          });
-        }
+        goToAlarm(response.notification.request.content.data);
       }
     });
 
@@ -145,10 +146,7 @@ function AppInner() {
       const data = response.notification.request.content.data;
       if (data) {
         if (navReady) {
-          navigationRef.current?.navigate('AlarmRinging', {
-            contentType: data.contentType,
-            isPrayer: data.isPrayer,
-          });
+          goToAlarm(data);
         } else {
           pendingAlarm.current = data;
         }
@@ -157,37 +155,18 @@ function AppInner() {
 
     const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data;
-      if (data && navReady) {
-        navigationRef.current?.navigate('AlarmRinging', {
-          contentType: data.contentType,
-          isPrayer: data.isPrayer,
-        });
-      }
+      if (data && navReady) goToAlarm(data);
     });
 
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        getInitialAlarmData().then((data) => {
-          if (data && data.fromAlarm && navigationRef.current) {
-            navigationRef.current.navigate('AlarmRinging', {
-              contentType: data.contentType,
-              isPrayer: data.isPrayer,
-            });
-          }
-        });
+        getInitialAlarmData().then(goToAlarm);
       }
     });
 
     const pendingPoll = setInterval(() => {
       if (navReady) {
-        checkPendingAlarm().then((data) => {
-          if (data && data.fromAlarm && navigationRef.current) {
-            navigationRef.current.navigate('AlarmRinging', {
-              contentType: data.contentType,
-              isPrayer: data.isPrayer,
-            });
-          }
-        });
+        checkPendingAlarm().then(goToAlarm);
       }
     }, 2000);
 
@@ -201,10 +180,7 @@ function AppInner() {
 
   useEffect(() => {
     if (navReady && pendingAlarm.current) {
-      navigationRef.current?.navigate('AlarmRinging', {
-        contentType: pendingAlarm.current.contentType,
-        isPrayer: pendingAlarm.current.isPrayer,
-      });
+      goToAlarm(pendingAlarm.current);
       pendingAlarm.current = null;
     }
   }, [navReady, permDone]);

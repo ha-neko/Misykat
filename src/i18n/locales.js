@@ -41,6 +41,8 @@ export const id = {
   saveAlarm: 'Simpan Alarm',
   alarmSaved: 'Alarm baru ditambahkan',
   saveFailed: 'Gagal menyimpan',
+  soundLabel: 'SUARA',
+  defaultSound: 'Default (Konten Islami)',
 
   // Settings
   settings: 'Pengaturan',
@@ -145,6 +147,8 @@ export const en = {
   saveAlarm: 'Save Alarm',
   alarmSaved: 'New alarm added',
   saveFailed: 'Failed to save',
+  soundLabel: 'SOUND',
+  defaultSound: 'Default (Islamic Content)',
 
   settings: 'Settings',
   profile: 'Profile',

@@ -140,6 +140,11 @@ export async function getAlarms() {
   } catch { return []; }
 }
 
+export async function getAlarmById(alarmId) {
+  const alarms = await getAlarms();
+  return alarms.find(a => a.id === alarmId) || null;
+}
+
 export async function getPrayerAlarms() {
   try {
     const data = await AsyncStorage.getItem(PRAYER_ALARMS_KEY);

@@ -1,19 +1,34 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal, TextInput, Platform, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { scheduleAlarm } from '../utils/notifications';
-import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon } from '../components/Icons';
+import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon, StarIcon } from '../components/Icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
+
+function HoldArrow({ onStep, children, st }) {
+  const timer = useRef(null);
+  const onPressIn = useCallback(() => {
+    onStep();
+    timer.current = setInterval(onStep, 120);
+  }, [onStep]);
+  const onPressOut = useCallback(() => {
+    if (timer.current) { clearInterval(timer.current); timer.current = null; }
+  }, []);
+  return (
+    <TouchableOpacity onPress={onStep} onPressIn={onPressIn} onPressOut={onPressOut} style={st.arrow}>
+      {children}
+    </TouchableOpacity>
+  );
+}
 
 function TimePicker({ hour, minute, onChange, st }) {
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState('');
-
-  function inc(n, set, max) { set(v => (v + 1) % max); }
-  function dec(n, set, max) { set(v => (v - 1 + max) % max); }
 
   function startEdit(field) {
     setEditing(field);
@@ -33,9 +48,9 @@ function TimePicker({ hour, minute, onChange, st }) {
   return (
     <View style={st.pickerRow}>
       <View style={st.pickerCol}>
-        <TouchableOpacity onPress={() => inc(hour, (v) => onChange(v, minute), 24)} style={st.arrow}>
+        <HoldArrow onStep={() => onChange((hour + 1) % 24, minute)} st={st}>
           <Text style={st.arrowText}>▲</Text>
-        </TouchableOpacity>
+        </HoldArrow>
         {editing === 'hour' ? (
           <TextInput
             style={st.pickerInput}
@@ -53,15 +68,15 @@ function TimePicker({ hour, minute, onChange, st }) {
             <Text style={st.pickerValue}>{hour.toString().padStart(2, '0')}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={() => dec(hour, (v) => onChange(v, minute), 24)} style={st.arrow}>
+        <HoldArrow onStep={() => onChange((hour - 1 + 24) % 24, minute)} st={st}>
           <Text style={st.arrowText}>▼</Text>
-        </TouchableOpacity>
+        </HoldArrow>
       </View>
       <Text style={st.pickerSep}>:</Text>
       <View style={st.pickerCol}>
-        <TouchableOpacity onPress={() => inc(minute, (v) => onChange(hour, v), 60)} style={st.arrow}>
+        <HoldArrow onStep={() => onChange(hour, (minute + 1) % 60)} st={st}>
           <Text style={st.arrowText}>▲</Text>
-        </TouchableOpacity>
+        </HoldArrow>
         {editing === 'minute' ? (
           <TextInput
             style={st.pickerInput}
@@ -79,9 +94,9 @@ function TimePicker({ hour, minute, onChange, st }) {
             <Text style={st.pickerValue}>{minute.toString().padStart(2, '0')}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={() => dec(minute, (v) => onChange(hour, v), 60)} style={st.arrow}>
+        <HoldArrow onStep={() => onChange(hour, (minute - 1 + 60) % 60)} st={st}>
           <Text style={st.arrowText}>▼</Text>
-        </TouchableOpacity>
+        </HoldArrow>
       </View>
     </View>
   );
@@ -94,6 +109,7 @@ export default function AddAlarmScreen({ navigation, route }) {
   const [minute, setMinute] = useState(0);
   const [label, setLabel] = useState('');
   const [contentType, setContentType] = useState('random');
+  const [customSound, setCustomSound] = useState(null);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [tempLabel, setTempLabel] = useState(label);
 
@@ -104,9 +120,25 @@ export default function AddAlarmScreen({ navigation, route }) {
     { key: 'ceramah', label: t('ceramah'), icon: SpeakerIcon, desc: t('ceramahDesc') },
   ];
 
+  async function pickSound() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*', 'video/*'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        const localUri = FileSystem.documentDirectory + 'custom_sounds/' + asset.name;
+        await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'custom_sounds/', { intermediates: true });
+        await FileSystem.copyAsync({ from: asset.uri, to: localUri });
+        setCustomSound({ name: asset.name, uri: localUri });
+      }
+    } catch {}
+  }
+
   async function handleSave() {
     try {
-      await scheduleAlarm({ hour, minute, label, type: 'custom', contentType });
+      await scheduleAlarm({ hour, minute, label, type: 'custom', contentType, customSound: customSound?.uri || null });
       Alert.alert(t('success'), t('alarmSaved'));
       navigation.goBack();
     } catch (err) {
@@ -167,6 +199,19 @@ export default function AddAlarmScreen({ navigation, route }) {
               );
             })}
           </View>
+        </View>
+
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>{t('soundLabel')}</Text>
+          <TouchableOpacity style={s.soundBtn} onPress={pickSound} activeOpacity={0.7}>
+            <View style={s.soundLeft}>
+              <StarIcon color={colors.primary} size={14} />
+              <Text style={[s.soundText, !customSound && s.soundPlaceholder]}>
+                {customSound ? customSound.name : t('defaultSound')}
+              </Text>
+            </View>
+            <Text style={s.soundArrow}>↻</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={s.saveBtn} onPress={handleSave} activeOpacity={0.85}>
@@ -249,6 +294,14 @@ const makeStyles = (c) => StyleSheet.create({
   },
   labelText: { fontSize: 15, color: c.onSurface },
   labelPlaceholder: { color: c.outline },
+  soundBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: c.surface, borderRadius: 12, padding: 14,
+  },
+  soundLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  soundText: { fontSize: 14, color: c.onSurface },
+  soundPlaceholder: { color: c.outline },
+  soundArrow: { fontSize: 16, color: c.primary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: {
     backgroundColor: c.surface, borderRadius: 16, padding: 16, alignItems: 'center',

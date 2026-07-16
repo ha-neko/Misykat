@@ -14,7 +14,7 @@ import { useLocale } from '../i18n/LanguageContext';
 export default function AlarmRingingScreen({ route, navigation }) {
   const { colors } = useTheme();
   const { t } = useLocale();
-  const { content: passedContent, isPrayer, contentType } = route.params || {};
+  const { content: passedContent, isPrayer, contentType, customSound } = route.params || {};
   const [content, setContent] = useState(null);
   const [sound, setSound] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +48,28 @@ export default function AlarmRingingScreen({ route, navigation }) {
   }
 
   async function playAudio(c) {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+    } catch {}
+
+    if (customSound) {
+      try {
+        setAudioStatus(t('playing'));
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: customSound },
+          { shouldPlay: true, isLooping: isPrayer, volume: 1.0 }
+        );
+        setSound(newSound);
+        setAudioStatus('');
+        setIsLoading(false);
+        return;
+      } catch { setIsLoading(false); return; }
+    }
+
     const firstSrc = getAudioForContent(c, isPrayer);
     if (!firstSrc) { setIsLoading(false); return; }
     setAudioInfo(firstSrc);
@@ -57,14 +79,6 @@ export default function AlarmRingingScreen({ route, navigation }) {
       const alt = getAudioForContent(c, isPrayer);
       if (alt && alt.cacheKey !== firstSrc.cacheKey) sources.push(alt);
     }
-
-    try {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-      });
-    } catch {}
 
     for (const src of sources) {
       try {
