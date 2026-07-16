@@ -64,6 +64,18 @@ function addReceiver(manifest) {
   return manifest;
 }
 
+function addService(manifest) {
+  if (!manifest['manifest']['application']) return manifest;
+  const app = manifest['manifest']['application'][0];
+  if (!app['service']) app['service'] = [];
+  const name = '.MisykatAlarmService';
+  if (app['service'].some((s) => s.$ && s.$['android:name'] === name)) return manifest;
+  app['service'].push({
+    $: { 'android:name': name, 'android:exported': 'false', 'android:foregroundServiceType': 'dataSync' },
+  });
+  return manifest;
+}
+
 function writeAlarmReceiver(projectRoot) {
   const dir = TARGET_DIR(projectRoot);
   fs.mkdirSync(dir, { recursive: true });
@@ -71,6 +83,16 @@ function writeAlarmReceiver(projectRoot) {
   if (!fs.existsSync(fp)) {
     fs.writeFileSync(fp, ALARM_RECEIVER_CODE, 'utf8');
     console.log('Wrote AlarmReceiver.java');
+  }
+}
+
+function writeAlarmService(projectRoot) {
+  const dir = TARGET_DIR(projectRoot);
+  fs.mkdirSync(dir, { recursive: true });
+  const fp = path.join(dir, 'MisykatAlarmService.java');
+  if (!fs.existsSync(fp)) {
+    fs.writeFileSync(fp, ALARM_SERVICE_CODE, 'utf8');
+    console.log('Wrote MisykatAlarmService.java');
   }
 }
 
@@ -149,104 +171,46 @@ function patchAppBuildGradle(projectRoot) {
 
 const ALARM_RECEIVER_CODE = `package com.misykat.alarm;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.media.AudioManager;
-import android.media.RingtoneManager;
 import android.os.Build;
-import android.os.Bundle;
-import android.os.PowerManager;
 import android.util.Log;
 
 public class AlarmReceiver extends BroadcastReceiver {
   private static final String TAG = "MisykatAlarm";
-  private static final String CHANNEL_ID = "alarm_call";
-  private static final int NOTIFICATION_ID_BASE = 9001;
   private static final String PREFS_NAME = "misykat_alarm";
   private static final String KEY_PENDING_ALARM = "pendingAlarmData";
 
   @Override
   public void onReceive(Context context, Intent intent) {
-    PowerManager.WakeLock wl = null;
-    PendingResult pendingResult = goAsync();
-
     try {
-      PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-      wl = pm.newWakeLock(
-        PowerManager.FULL_WAKE_LOCK |
-        PowerManager.ACQUIRE_CAUSES_WAKEUP |
-        PowerManager.ON_AFTER_RELEASE,
-        "Misykat:WakeLock"
-      );
-      wl.acquire(30000);
-
       String alarmId = intent.getStringExtra("alarmId");
       String contentType = intent.getStringExtra("contentType");
       boolean isPrayer = intent.getBooleanExtra("isPrayer", false);
       int hour = intent.getIntExtra("hour", 7);
       int minute = intent.getIntExtra("minute", 0);
 
-      forceRingerNormal(context);
-
-      rescheduleForTomorrow(context, alarmId, hour, minute, contentType, isPrayer);
-
       savePendingAlarm(context, alarmId, contentType, isPrayer);
 
-      showFullScreenNotification(context, alarmId, contentType, isPrayer);
-
-      launchAlarmActivity(context, alarmId, contentType, isPrayer);
-    } catch (Exception e) {
-      Log.e(TAG, "Failed to process alarm", e);
-    } finally {
-      if (wl != null && wl.isHeld()) {
-        try { wl.release(); } catch (Exception ignored) {}
+      if (isPrayer || alarmId == null) {
+        rescheduleForTomorrow(context, alarmId, hour, minute, contentType, isPrayer);
       }
-      pendingResult.finish();
-    }
-  }
 
-  private void forceRingerNormal(Context context) {
-    try {
-      AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-      if (am != null) {
-        am.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
-        am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0);
-        am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+      Intent svc = new Intent(context, MisykatAlarmService.class);
+      svc.putExtra("alarmId", alarmId);
+      svc.putExtra("contentType", contentType);
+      svc.putExtra("isPrayer", isPrayer);
+      svc.putExtra("hour", hour);
+      svc.putExtra("minute", minute);
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(svc);
+      } else {
+        context.startService(svc);
       }
     } catch (Exception e) {
-      Log.w(TAG, "Failed to force ringer", e);
-    }
-  }
-
-  private void launchAlarmActivity(Context context, String alarmId, String contentType, boolean isPrayer) {
-    try {
-      Intent launchIntent = new Intent(context, MainActivity.class);
-      launchIntent.addFlags(
-        Intent.FLAG_ACTIVITY_NEW_TASK |
-        Intent.FLAG_ACTIVITY_SINGLE_TOP |
-        Intent.FLAG_ACTIVITY_CLEAR_TOP
-      );
-      if (alarmId != null) launchIntent.putExtra("alarmId", alarmId);
-      if (contentType != null) launchIntent.putExtra("contentType", contentType);
-      launchIntent.putExtra("isPrayer", isPrayer);
-      launchIntent.putExtra("fromAlarmReceiver", true);
-      launchIntent.putExtra("directLaunch", true);
-
-      PendingIntent pi = PendingIntent.getActivity(
-        context,
-        (alarmId != null ? alarmId.hashCode() : 9001) + 1000,
-        launchIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-      );
-      pi.send();
-    } catch (Exception e) {
-      Log.e(TAG, "Direct activity launch failed", e);
+      Log.e(TAG, "Failed to start alarm service", e);
     }
   }
 
@@ -268,9 +232,9 @@ public class AlarmReceiver extends BroadcastReceiver {
       rescheduleIntent.putExtra("hour", hour);
       rescheduleIntent.putExtra("minute", minute);
 
-      PendingIntent pi = PendingIntent.getBroadcast(
+      android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(
         context, alarmId.hashCode(), rescheduleIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
       );
 
       android.app.AlarmManager am = (android.app.AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
@@ -292,30 +256,95 @@ public class AlarmReceiver extends BroadcastReceiver {
       Log.e(TAG, "Failed to save pending alarm", e);
     }
   }
+}
+`;
 
-  private void showFullScreenNotification(Context context, String alarmId, String contentType, boolean isPrayer) {
-    NotificationManager notificationManager =
-      (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-    if (notificationManager == null) return;
+const ALARM_SERVICE_CODE = `package com.misykat.alarm;
 
-    ensureChannel(notificationManager);
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.media.AudioManager;
+import android.media.RingtoneManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.PowerManager;
+import android.util.Log;
 
-    Intent activityIntent = new Intent(context, MainActivity.class);
-    activityIntent.addFlags(
-      Intent.FLAG_ACTIVITY_NEW_TASK |
-      Intent.FLAG_ACTIVITY_SINGLE_TOP |
-      Intent.FLAG_ACTIVITY_CLEAR_TOP
-    );
+public class MisykatAlarmService extends Service {
+  private static final String TAG = "MisykatAlarmSvc";
+  private static final String CHANNEL_ID = "alarm_foreground";
+  private static final int FOREGROUND_NOTIF_ID = 9000;
+  private static final int NOTIFICATION_ID_BASE = 9001;
+  private PowerManager.WakeLock wl;
+
+  @Override
+  public IBinder onBind(Intent intent) { return null; }
+
+  @Override
+  public int onStartCommand(Intent intent, int flags, int startId) {
+    if (intent == null) { stopSelf(); return START_NOT_STICKY; }
+
+    String alarmId = intent.getStringExtra("alarmId");
+    String contentType = intent.getStringExtra("contentType");
+    boolean isPrayer = intent.getBooleanExtra("isPrayer", false);
+    int hour = intent.getIntExtra("hour", 7);
+    int minute = intent.getIntExtra("minute", 0);
+
+    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+    if (pm != null) {
+      wl = pm.newWakeLock(
+        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+        "Misykat:AlarmSvcWL"
+      );
+      wl.acquire(30000);
+    }
+
+    forceRingerNormal();
+    showForegroundNotification();
+    showAlarmNotification(alarmId, contentType, isPrayer);
+    launchAlarmActivity(alarmId, contentType, isPrayer);
+
+    new android.os.Handler(getMainLooper()).postDelayed(() -> {
+      releaseWakeLock();
+      stopForeground(STOP_FOREGROUND_REMOVE);
+      stopSelf();
+    }, 60000);
+
+    return START_NOT_STICKY;
+  }
+
+  private void showForegroundNotification() {
+    ensureChannel();
+    Notification notif = new Notification.Builder(this, CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_dialog_alert)
+      .setContentTitle("Misykat")
+      .setContentText("Alarm berbunyi")
+      .setPriority(Notification.PRIORITY_MIN)
+      .setOngoing(true)
+      .build();
+    startForeground(FOREGROUND_NOTIF_ID, notif);
+  }
+
+  private void showAlarmNotification(String alarmId, String contentType, boolean isPrayer) {
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm == null) return;
+
+    Intent activityIntent = new Intent(this, MainActivity.class);
+    activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
     if (alarmId != null) activityIntent.putExtra("alarmId", alarmId);
     if (contentType != null) activityIntent.putExtra("contentType", contentType);
     activityIntent.putExtra("isPrayer", isPrayer);
     activityIntent.putExtra("fromAlarmReceiver", true);
 
-    int requestCode = alarmId != null ? alarmId.hashCode() : NOTIFICATION_ID_BASE;
-    PendingIntent fullScreenIntent = PendingIntent.getActivity(
-      context, requestCode, activityIntent,
-      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-    );
+    int rc = alarmId != null ? alarmId.hashCode() : NOTIFICATION_ID_BASE;
+    PendingIntent pi = PendingIntent.getActivity(this, rc, activityIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
     Bundle data = new Bundle();
     if (alarmId != null) data.putString("alarmId", alarmId);
@@ -323,13 +352,13 @@ public class AlarmReceiver extends BroadcastReceiver {
     data.putBoolean("isPrayer", isPrayer);
     data.putBoolean("fromAlarm", true);
 
-    Notification notification = new Notification.Builder(context, CHANNEL_ID)
+    Notification notif = new Notification.Builder(this, "alarm_call")
       .setSmallIcon(android.R.drawable.ic_dialog_alert)
       .setContentTitle("Misykat")
       .setContentText("Waktunya bangun!")
       .setPriority(Notification.PRIORITY_MAX)
       .setCategory(Notification.CATEGORY_CALL)
-      .setFullScreenIntent(fullScreenIntent, true)
+      .setFullScreenIntent(pi, true)
       .setAutoCancel(true)
       .setOngoing(true)
       .setVisibility(Notification.VISIBILITY_PUBLIC)
@@ -337,23 +366,63 @@ public class AlarmReceiver extends BroadcastReceiver {
       .setExtras(data)
       .build();
 
-    notificationManager.notify(requestCode, notification);
+    nm.notify(rc, notif);
   }
 
-  private void ensureChannel(NotificationManager manager) {
+  private void launchAlarmActivity(String alarmId, String contentType, boolean isPrayer) {
+    try {
+      Intent i = new Intent(this, MainActivity.class);
+      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+      if (alarmId != null) i.putExtra("alarmId", alarmId);
+      if (contentType != null) i.putExtra("contentType", contentType);
+      i.putExtra("isPrayer", isPrayer);
+      i.putExtra("fromAlarmReceiver", true);
+      i.putExtra("directLaunch", true);
+
+      PendingIntent pi = PendingIntent.getActivity(this,
+        (alarmId != null ? alarmId.hashCode() : 9001) + 1000, i,
+        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+      pi.send();
+    } catch (Exception e) {
+      Log.e(TAG, "launch failed", e);
+    }
+  }
+
+  private void forceRingerNormal() {
+    try {
+      AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+      if (am != null) {
+        am.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+        am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0);
+        am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "ringer failed", e);
+    }
+  }
+
+  private void ensureChannel() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
-      if (channel == null) {
-        channel = new NotificationChannel(CHANNEL_ID, "Alarm", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("Alarm panggilan");
-        channel.setBypassDnd(true);
-        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        channel.enableVibration(true);
-        channel.setShowBadge(true);
-        channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), null);
-        manager.createNotificationChannel(channel);
+      NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+      if (nm == null) return;
+      NotificationChannel ch = nm.getNotificationChannel(CHANNEL_ID);
+      if (ch == null) {
+        ch = new NotificationChannel(CHANNEL_ID, "Alarm Layanan", NotificationManager.IMPORTANCE_MIN);
+        ch.setDescription("Notifikasi layanan alarm latar depan");
+        ch.setShowBadge(false);
+        nm.createNotificationChannel(ch);
       }
     }
+  }
+
+  private void releaseWakeLock() {
+    if (wl != null && wl.isHeld()) { try { wl.release(); } catch (Exception ignored) {} }
+  }
+
+  @Override
+  public void onDestroy() {
+    releaseWakeLock();
+    super.onDestroy();
   }
 }
 `;
@@ -363,6 +432,7 @@ module.exports = function withAndroidAlarm(config) {
     cfg.modResults = addPermissions(cfg.modResults);
     cfg.modResults = setActivityAttributes(cfg.modResults);
     cfg.modResults = addReceiver(cfg.modResults);
+    cfg.modResults = addService(cfg.modResults);
     return cfg;
   });
 
@@ -370,6 +440,7 @@ module.exports = function withAndroidAlarm(config) {
     'android',
     (cfg) => {
       writeAlarmReceiver(cfg.modRequest.projectRoot);
+      writeAlarmService(cfg.modRequest.projectRoot);
       patchMainActivity(cfg.modRequest.projectRoot);
       patchAppBuildGradle(cfg.modRequest.projectRoot);
       return cfg;
