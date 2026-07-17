@@ -92,11 +92,13 @@ Native (Android) — via Expo Modules API
 
 ## 📱 Screenshots
 
-| Lock Screen Alarm | Home | Alarm Ringing |
-|---|---|---|
-| *(auto-open)* | *(daftar alarm + next)* | *(full screen player)* |
+| Home | Alarm Ringing |
+|:---:|:---:|
+| <img src="screenshot/homepage.jpeg" width="200"/> | <img src="screenshot/alarm.jpeg" width="200"/> |
 
-> *(Screenshots akan ditambahkan setelah rilis)*
+| Prayer Times | Settings |
+|:---:|:---:|
+| <img src="screenshot/prayer.jpeg" width="200"/> | <img src="screenshot/setting.jpeg" width="200"/> |
 
 ---
 

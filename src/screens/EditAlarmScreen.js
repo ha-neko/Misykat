@@ -3,10 +3,13 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal, TextInput, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { getAlarms, deleteAlarm } from '../utils/notifications';
 import { scheduleNativeAlarm, cancelNativeAlarm } from '../utils/nativeAlarm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon } from '../components/Icons';
+import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon, StarIcon } from '../components/Icons';
+import TimePicker from '../components/TimePicker';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 
@@ -21,6 +24,7 @@ export default function EditAlarmScreen({ navigation, route }) {
   const [minute, setMinute] = useState(existing?.minute ?? 0);
   const [label, setLabel] = useState(existing?.label ?? '');
   const [contentType, setContentType] = useState(existing?.contentType ?? 'random');
+  const [customSound, setCustomSound] = useState(existing?.customSound ? { name: existing.customSound.split('/').pop(), uri: existing.customSound } : null);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [tempLabel, setTempLabel] = useState(label);
 
@@ -31,6 +35,22 @@ export default function EditAlarmScreen({ navigation, route }) {
     { key: 'ceramah', label: t('ceramah'), icon: SpeakerIcon, desc: t('ceramahDesc') },
   ];
 
+  async function pickSound() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*', 'video/*'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        const localUri = FileSystem.documentDirectory + 'custom_sounds/' + asset.name;
+        await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'custom_sounds/', { intermediates: true });
+        await FileSystem.copyAsync({ from: asset.uri, to: localUri });
+        setCustomSound({ name: asset.name, uri: localUri });
+      }
+    } catch {}
+  }
+
   async function handleSave() {
     try {
       if (existing) {
@@ -39,7 +59,7 @@ export default function EditAlarmScreen({ navigation, route }) {
         const all = await getAlarms();
         const idx = all.findIndex(a => a.id === existing.id);
         if (idx !== -1) {
-          all[idx] = { ...all[idx], hour, minute, label, contentType };
+          all[idx] = { ...all[idx], hour, minute, label, contentType, customSound: customSound?.uri || null };
           await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(all));
         }
       }
@@ -65,9 +85,6 @@ export default function EditAlarmScreen({ navigation, route }) {
     ]);
   }
 
-  function inc(n, set, max) { set(v => (v + 1) % max); }
-  function dec(n, set, max) { set(v => (v - 1 + max) % max); }
-
   const s = makeStyles(colors);
 
   return (
@@ -85,27 +102,7 @@ export default function EditAlarmScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.section}>
           <Text style={s.sectionLabel}>{t('time')}</Text>
-          <View style={s.pickerRow}>
-            <View style={s.pickerCol}>
-              <TouchableOpacity onPress={() => inc(hour, setHour, 24)} style={s.arrow}>
-                <Text style={s.arrowText}>▲</Text>
-              </TouchableOpacity>
-              <Text style={s.pickerValue}>{hour.toString().padStart(2, '0')}</Text>
-              <TouchableOpacity onPress={() => dec(hour, setHour, 24)} style={s.arrow}>
-                <Text style={s.arrowText}>▼</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={s.pickerSep}>:</Text>
-            <View style={s.pickerCol}>
-              <TouchableOpacity onPress={() => inc(minute, setMinute, 60)} style={s.arrow}>
-                <Text style={s.arrowText}>▲</Text>
-              </TouchableOpacity>
-              <Text style={s.pickerValue}>{minute.toString().padStart(2, '0')}</Text>
-              <TouchableOpacity onPress={() => dec(minute, setMinute, 60)} style={s.arrow}>
-                <Text style={s.arrowText}>▼</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TimePicker hour={hour} minute={minute} onChange={(h, m) => { setHour(h); setMinute(m); }} st={s} />
         </View>
 
         <View style={s.section}>
@@ -139,6 +136,19 @@ export default function EditAlarmScreen({ navigation, route }) {
               );
             })}
           </View>
+        </View>
+
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>{t('soundLabel')}</Text>
+          <TouchableOpacity style={s.soundBtn} onPress={pickSound} activeOpacity={0.7}>
+            <View style={s.soundLeft}>
+              <StarIcon color={colors.primary} size={14} />
+              <Text style={[s.soundText, !customSound && s.soundPlaceholder]}>
+                {customSound ? customSound.name : t('defaultSound')}
+              </Text>
+            </View>
+            <Text style={s.soundArrow}>↻</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={s.actions}>
@@ -213,6 +223,11 @@ const makeStyles = (c) => StyleSheet.create({
     fontSize: 48, fontWeight: '300', color: c.onSurface, marginVertical: 4,
     fontVariant: ['tabular-nums'],
   },
+  pickerInput: {
+    fontSize: 48, fontWeight: '300', color: c.onSurface,
+    fontVariant: ['tabular-nums'], width: '100%', textAlign: 'center',
+    padding: 0, margin: 0, height: 56,
+  },
   pickerSep: { fontSize: 48, fontWeight: '300', color: c.outline, marginHorizontal: 4, marginTop: -4 },
   labelBtn: {
     backgroundColor: c.surface, borderRadius: 12, padding: 16,
@@ -223,6 +238,14 @@ const makeStyles = (c) => StyleSheet.create({
   },
   labelText: { fontSize: 15, color: c.onSurface },
   labelPlaceholder: { color: c.outline },
+  soundBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: c.surface, borderRadius: 12, padding: 14,
+  },
+  soundLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  soundText: { fontSize: 14, color: c.onSurface },
+  soundPlaceholder: { color: c.outline },
+  soundArrow: { fontSize: 16, color: c.primary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: {
     backgroundColor: c.surface, borderRadius: 16, padding: 16, alignItems: 'center',
