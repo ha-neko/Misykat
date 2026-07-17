@@ -92,7 +92,7 @@ Native (Android) — via Expo Modules API
 
 ## 📱 Screenshots
 
-| Home | Alarm Ringing |
+| Home | Set Alarm |
 |:---:|:---:|
 | <img src="screenshot/homepage.jpeg" width="200"/> | <img src="screenshot/alarm.jpeg" width="200"/> |
 
