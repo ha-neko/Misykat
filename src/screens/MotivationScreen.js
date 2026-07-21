@@ -1,157 +1,192 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Platform, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, StatusBar, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  getShuffled, getSubcategories, getCategoryLabel, getCategories,
-  getFavorites, getFavIds, toggleFavorite,
+  getShuffled, getCategories, getCategoryLabel,
+  getFavorites, getFavIds, toggleFavorite, getMotivationById,
 } from '../utils/motivations';
 import { BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 
-const PAGE_SIZE = 6;
-const MAX_CACHE = 10;
+const { height: SCREEN_H } = Dimensions.get('window');
+const PAGE_SIZE = 8;
+const MAX_CACHE = 12;
+
+const BG_PALETTE = [
+  ['#1a1a2e', '#16213e'],
+  ['#2d1b69', '#11998e'],
+  ['#0f3443', '#34e89e'],
+  ['#2c3e50', '#3498db'],
+  ['#141e30', '#243b55'],
+  ['#1f1c2c', '#928dab'],
+  ['#0d0d0d', '#3a1c71'],
+  ['#1a1a2e', '#e94560'],
+  ['#0f0c29', '#302b63'],
+  ['#42275a', '#734b6d'],
+  ['#1b2735', '#090a0f'],
+  ['#1d2671', '#c33764'],
+  ['#0b8793', '#360033'],
+  ['#2b0b42', '#5b2a6b'],
+  ['#1a2a6c', '#b21f1f'],
+];
+
+function removeItem(arr, id) {
+  const idx = arr.findIndex(i => i.id === id);
+  if (idx !== -1) arr.splice(idx, 1);
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 export default function MotivationScreen() {
   const { colors } = useTheme();
   const { t } = useLocale();
   const cats = getCategories();
+  const listRef = useRef(null);
+  const poolRef = useRef([]);
+  const recentRef = useRef([]);
+  const currentTab = useRef('pekerjaan');
+
   const [activeTab, setActiveTab] = useState('pekerjaan');
   const [items, setItems] = useState([]);
-  const [shownIds, setShownIds] = useState(new Set());
-  const [pool, setPool] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [favIds, setFavIds] = useState(new Set());
-  const [favorites, setFavorites] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const [favIds, setFavIdsState] = useState(new Set());
+  const [favItems, setFavItems] = useState([]);
 
-  useEffect(() => { loadFavorites(); }, []);
+  useEffect(() => { loadFavs(); }, []);
 
   useEffect(() => {
     if (activeTab !== '_fav') {
-      refreshPool();
+      currentTab.current = activeTab;
+      initPool(activeTab);
     }
   }, [activeTab]);
 
-  async function loadFavorites() {
+  async function loadFavs() {
     const ids = await getFavIds();
-    setFavIds(new Set(ids));
-    setFavorites(await getFavorites());
+    setFavIdsState(new Set(ids));
+    setFavItems(await getFavorites());
   }
 
-  function refreshPool() {
-    const shuffled = getShuffled(activeTab);
-    setPool(shuffled);
-    setShownIds(new Set());
-    setItems(shuffled.slice(0, PAGE_SIZE));
-    setShownIds(new Set(shuffled.slice(0, PAGE_SIZE).map(i => i.id)));
+  function initPool(cat) {
+    const shuffled = shuffle(getShuffled(cat));
+    poolRef.current = shuffled;
+    recentRef.current = [];
+    const initial = shuffled.slice(0, PAGE_SIZE).map((item, i) => ({
+      ...item,
+      _bgIdx: i % BG_PALETTE.length,
+    }));
+    setItems(initial);
+    initial.forEach(i => recentRef.current.push(i.id));
   }
 
   function loadMore() {
-    const available = pool.filter(i => !shownIds.has(i.id));
+    const recent = recentRef.current;
+    const available = poolRef.current.filter(i => !recent.includes(i.id));
     if (available.length === 0) {
-      const reshuffled = getShuffled(activeTab);
-      setPool(reshuffled);
-      const keep = items.slice(-MAX_CACHE);
-      const keepIds = new Set(keep.map(i => i.id));
-      const newItems = reshuffled.filter(i => !keepIds.has(i.id)).slice(0, PAGE_SIZE);
-      if (newItems.length > 0) {
-        setItems(prev => [...prev, ...newItems]);
-        setShownIds(prev => {
-          const merged = new Set(prev);
-          newItems.forEach(i => merged.add(i.id));
-          return merged;
-        });
-      }
+      poolRef.current = shuffle(getShuffled(currentTab.current));
+      recentRef.current = [];
+      const fresh = poolRef.current.slice(0, PAGE_SIZE).map((item, i) => ({
+        ...item,
+        _bgIdx: (i + items.length) % BG_PALETTE.length,
+      }));
+      setItems(prev => [...prev, ...fresh]);
+      fresh.forEach(i => recentRef.current.push(i.id));
       return;
     }
-    const next = available.slice(0, PAGE_SIZE);
+    const next = available.slice(0, PAGE_SIZE).map((item, i) => ({
+      ...item,
+      _bgIdx: (i + items.length) % BG_PALETTE.length,
+    }));
     setItems(prev => [...prev, ...next]);
-    setShownIds(prev => {
-      const merged = new Set(prev);
-      next.forEach(i => merged.add(i.id));
-      return merged;
-    });
+    const newRecent = [...recentRef.current, ...next.map(i => i.id)];
+    if (newRecent.length > MAX_CACHE) {
+      newRecent.splice(0, newRecent.length - MAX_CACHE);
+    }
+    recentRef.current = newRecent;
   }
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadFavorites();
-    refreshPool();
-    setRefreshing(false);
-  }, [activeTab]);
 
   async function handleFav(id) {
     await toggleFavorite(id);
-    await loadFavorites();
-    setItems(prev => prev.map(i => i.id === id ? { ...i, _favToggled: true } : i));
+    await loadFavs();
   }
 
   const isFavTab = activeTab === '_fav';
 
-  function renderItem({ item }) {
+  function renderQuote({ item }) {
+    const bg = BG_PALETTE[item._bgIdx % BG_PALETTE.length];
     const isFav = favIds.has(item.id);
     return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => setSelectedItem(item)}
-        activeOpacity={0.85}
-      >
-        <View style={s.cardTop}>
-          <View style={s.cardLabelRow}>
-            <View style={s.subBadge}>
-              <Text style={s.subBadgeText}>{item.sub}</Text>
+      <View style={[s.page, { backgroundColor: bg[0] }]}>
+        <View style={[s.bgAccent, { backgroundColor: bg[1] }]} />
+        <SafeAreaView style={s.pageInner} edges={['top']}>
+          <View style={s.topRow}>
+            <View style={s.pillRow}>
+              <View style={s.pill}><Text style={s.pillText}>{item.sub}</Text></View>
             </View>
+            <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+              {isFav
+                ? <BookmarkFillIcon color="#FFD700" size={22} />
+                : <BookmarkIcon color="rgba(255,255,255,0.6)" size={22} />
+              }
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
-            {isFav ? <BookmarkFillIcon color={colors.accent} size={20} /> : <BookmarkIcon color={colors.outline} size={20} />}
-          </TouchableOpacity>
-        </View>
-        <Text style={s.cardTitle}>{item.title}</Text>
-        <Text style={s.cardQuote} numberOfLines={2}>{item.quote}</Text>
-        <Text style={s.cardSource}>{item.source}</Text>
-      </TouchableOpacity>
+          <View style={s.quoteWrap}>
+            <Text style={s.quoteIcon}>"</Text>
+            <Text style={s.quoteText}>{item.quote}</Text>
+            <Text style={s.sourceText}>{item.source}</Text>
+          </View>
+          <View style={s.bottomRow}>
+            <Text style={s.titleText}>{item.title}</Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   function renderFavItem({ item }) {
+    const bg = BG_PALETTE[Math.abs(item.id.charCodeAt(0)) % BG_PALETTE.length];
     const isFav = favIds.has(item.id);
     return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => setSelectedItem(item)}
-        activeOpacity={0.85}
-      >
-        <View style={s.cardTop}>
-          <View style={s.cardLabelRow}>
-            <View style={s.subBadge}><Text style={s.subBadgeText}>{item.sub}</Text></View>
-            <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
+      <View style={[s.page, { backgroundColor: bg[0] }]}>
+        <View style={[s.bgAccent, { backgroundColor: bg[1] }]} />
+        <SafeAreaView style={s.pageInner} edges={['top']}>
+          <View style={s.topRow}>
+            <View style={s.pillRow}>
+              <View style={s.pill}><Text style={s.pillText}>{item.sub}</Text></View>
+              <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+              {isFav
+                ? <BookmarkFillIcon color="#FFD700" size={22} />
+                : <BookmarkIcon color="rgba(255,255,255,0.6)" size={22} />
+              }
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
-            {isFav ? <BookmarkFillIcon color={colors.accent} size={20} /> : <BookmarkIcon color={colors.outline} size={20} />}
-          </TouchableOpacity>
-        </View>
-        <Text style={s.cardTitle}>{item.title}</Text>
-        <Text style={s.cardQuote} numberOfLines={2}>{item.quote}</Text>
-        <Text style={s.cardSource}>{item.source}</Text>
-      </TouchableOpacity>
+          <View style={s.quoteWrap}>
+            <Text style={s.quoteIcon}>"</Text>
+            <Text style={s.quoteText}>{item.quote}</Text>
+            <Text style={s.sourceText}>{item.source}</Text>
+          </View>
+          <View style={s.bottomRow}>
+            <Text style={s.titleText}>{item.title}</Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
-  const s = makeStyles(colors);
-
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
-      <View style={s.topDecoration}>
-        <View style={s.decoDot} /><View style={s.decoDot} /><View style={s.decoDot} />
-      </View>
-      <View style={s.header}>
-        <Text style={s.pageTitle}>{t('motivation')}</Text>
-      </View>
-
-      <View style={s.tabRow}>
+    <View style={s.root}>
+      <StatusBar barStyle="light-content" />
+      <View style={s.tabOverlay}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -163,11 +198,12 @@ export default function MotivationScreen() {
             return (
               <TouchableOpacity
                 style={[s.tab, active && s.tabActive]}
-                onPress={() => setActiveTab(item)}
+                onPress={() => {
+                  setActiveTab(item);
+                  if (listRef.current && item !== '_fav') listRef.current.scrollToOffset({ offset: 0, animated: false });
+                }}
               >
-                {item === '_fav' ? (
-                  <BookmarkIcon color={active ? colors.onPrimary : colors.outline} size={14} />
-                ) : null}
+                {item === '_fav' && <BookmarkFillIcon color={active ? '#1a1a2e' : 'rgba(255,255,255,0.7)'} size={12} />}
                 <Text style={[s.tabText, active && s.tabTextActive]}>
                   {item === '_fav' ? 'Favorit' : getCategoryLabel(item)}
                 </Text>
@@ -178,123 +214,136 @@ export default function MotivationScreen() {
       </View>
 
       {isFavTab ? (
-        favorites.length === 0 ? (
-          <View style={s.empty}>
-            <BookmarkIcon color={colors.outline} size={40} />
+        favItems.length === 0 ? (
+          <View style={[s.emptyRoot, { backgroundColor: '#1a1a2e' }]}>
+            <BookmarkIcon color="rgba(255,255,255,0.3)" size={50} />
             <Text style={s.emptyTitle}>{t('noFavorites')}</Text>
             <Text style={s.emptyHint}>{t('noFavoritesHint')}</Text>
           </View>
         ) : (
           <FlatList
-            data={favorites}
-            keyExtractor={i => i.id}
+            ref={listRef}
+            data={favItems}
+            keyExtractor={(item, idx) => `${item.id}-fav-${idx}`}
             renderItem={renderFavItem}
-            contentContainerStyle={s.list}
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
+            pagingEnabled
             showsVerticalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToAlignment="start"
           />
         )
       ) : (
         <FlatList
+          ref={listRef}
           data={items}
           keyExtractor={(item, idx) => `${item.id}-${idx}`}
-          renderItem={renderItem}
-          contentContainerStyle={s.list}
+          renderItem={renderQuote}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
           onEndReached={loadMore}
           onEndReachedThreshold={2}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          showsVerticalScrollIndicator={false}
-          ListFooterComponent={() => items.length > 0 ? <View style={{ height: 24 }} /> : null}
+          decelerationRate="fast"
+          snapToAlignment="start"
         />
       )}
-
-      <Modal visible={!!selectedItem} transparent animationType="fade">
-        <View style={s.overlay}>
-          <View style={s.modal}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>{selectedItem?.title}</Text>
-              <TouchableOpacity onPress={() => setSelectedItem(null)} hitSlop={12}>
-                <Text style={s.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={[selectedItem]}
-              keyExtractor={i => i.id}
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <View>
-                  <Text style={s.modalQuote}>{item.quote}</Text>
-                  <Text style={s.modalSource}>{item.source}</Text>
-                  <View style={s.modalDivider} />
-                  <Text style={s.modalContent}>{item.content}</Text>
-                </View>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
-const makeStyles = (c) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  topDecoration: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 4, paddingBottom: 2 },
-  decoDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.accent, opacity: 0.3 },
-  header: { paddingHorizontal: 16, paddingVertical: 12 },
-  pageTitle: { fontSize: 22, fontWeight: '700', color: c.onSurface },
-  tabRow: { borderBottomWidth: 1, borderBottomColor: c.borderLight },
-  tabScroll: { paddingHorizontal: 12, gap: 6, paddingBottom: 10, paddingTop: 2 },
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0d0d0d' },
+  page: {
+    height: SCREEN_H,
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  bgAccent: {
+    position: 'absolute',
+    top: -100,
+    right: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    opacity: 0.3,
+  },
+  pageInner: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingBottom: 40,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'android' ? 40 : 20,
+  },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  pillText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.5 },
+  catLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
+  quoteWrap: { flex: 1, justifyContent: 'center', paddingBottom: 60 },
+  quoteIcon: {
+    fontSize: 72,
+    color: 'rgba(255,255,255,0.1)',
+    fontWeight: '700',
+    marginBottom: -20,
+    lineHeight: 80,
+  },
+  quoteText: {
+    fontSize: 22,
+    color: '#fff',
+    fontWeight: '400',
+    lineHeight: 34,
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
+  },
+  sourceText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 14,
+    fontWeight: '500',
+  },
+  bottomRow: {
+    alignItems: 'center',
+    paddingBottom: 30,
+  },
+  titleText: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  tabOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 30 : 50,
+  },
+  tabScroll: { paddingHorizontal: 16, gap: 8, paddingBottom: 4, alignItems: 'center' },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.borderLight,
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
-  tabActive: { backgroundColor: c.primary, borderColor: c.primary },
-  tabText: { fontSize: 13, fontWeight: '600', color: c.onSurfaceVariant },
-  tabTextActive: { color: c.onPrimary },
-  list: { padding: 16, paddingBottom: 40 },
-  card: {
-    backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 12,
-    borderWidth: 1, borderColor: c.borderLight,
-    ...Platform.select({
-      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
-      android: { elevation: 1 },
-    }),
+  tabActive: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderColor: 'rgba(255,255,255,0.9)',
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  cardLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  subBadge: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-    backgroundColor: c.primaryContainer,
+  tabText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.3 },
+  tabTextActive: { color: '#1a1a2e' },
+  emptyRoot: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 48, gap: 10,
   },
-  subBadgeText: { fontSize: 10, fontWeight: '600', color: c.primary },
-  catLabel: { fontSize: 10, color: c.onSurfaceVariant, fontWeight: '500' },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: c.onSurface, marginBottom: 6 },
-  cardQuote: { fontSize: 13, color: c.onSurfaceVariant, fontStyle: 'italic', lineHeight: 19 },
-  cardSource: { fontSize: 11, color: c.accent, marginTop: 5, fontWeight: '500' },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80, gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: c.onSurfaceVariant, marginTop: 12 },
-  emptyHint: { fontSize: 13, color: c.outline, textAlign: 'center', paddingHorizontal: 48, lineHeight: 18 },
-  overlay: {
-    flex: 1, backgroundColor: c.scrim + '80', justifyContent: 'center', alignItems: 'center', padding: 24,
-  },
-  modal: {
-    backgroundColor: c.surface, borderRadius: 24, padding: 24, width: '100%', maxHeight: '80%',
-    ...Platform.select({
-      ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 24 },
-      android: { elevation: 8 },
-    }),
-  },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: c.onSurface, flex: 1, marginRight: 16 },
-  modalClose: { fontSize: 20, color: c.outline, fontWeight: '600' },
-  modalQuote: { fontSize: 15, color: c.onSurfaceVariant, fontStyle: 'italic', lineHeight: 23 },
-  modalSource: { fontSize: 12, color: c.accent, marginTop: 6, fontWeight: '500' },
-  modalDivider: { height: 1, backgroundColor: c.borderLight, marginVertical: 16 },
-  modalContent: { fontSize: 14, color: c.onSurface, lineHeight: 22 },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
+  emptyHint: { fontSize: 14, color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 20 },
 });
