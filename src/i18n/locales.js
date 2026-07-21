@@ -105,6 +105,12 @@ export const id = {
   tabAdd: 'Tambah',
   tabPrayer: 'Sholat',
   tabSettings: 'Pengaturan',
+  tabMotivasi: 'Motivasi',
+
+  // Motivation
+  motivation: 'Motivasi',
+  noFavorites: 'Belum Ada Favorit',
+  noFavoritesHint: 'Tap icon bookmark pada motivasi untuk menyimpannya',
 };
 
 export const en = {
@@ -204,4 +210,9 @@ export const en = {
   tabAdd: 'Add',
   tabPrayer: 'Prayer',
   tabSettings: 'Settings',
+  tabMotivasi: 'Motivation',
+
+  motivation: 'Motivation',
+  noFavorites: 'No Favorites',
+  noFavoritesHint: 'Tap the bookmark icon on a motivation to save it',
 };

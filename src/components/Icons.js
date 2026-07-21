@@ -110,3 +110,28 @@ export function GlobeIcon({ color = '#707973', size = 24 }) {
     </Svg>
   );
 }
+
+export function BookmarkIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function BookmarkFillIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z" />
+    </Svg>
+  );
+}
+
+export function MotivasiIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 5H5a1 1 0 00-1 1v6a1 1 0 001 1h2l2 3v-3h1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M15 5h4a1 1 0 011 1v6a1 1 0 01-1 1h-2l-2 3v-3h-1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}

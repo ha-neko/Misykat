@@ -12,10 +12,12 @@ import EditAlarmScreen from './src/screens/EditAlarmScreen';
 import PrayerTimesScreen from './src/screens/PrayerTimesScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import MotivationScreen from './src/screens/MotivationScreen';
 import PermissionScreen from './src/screens/PermissionScreen';
 import { requestPermissions, getAlarmById } from './src/utils/notifications';
 import { getInitialAlarmData, checkPendingAlarm, canScheduleExactAlarm } from './src/utils/nativeAlarm';
 import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/TabIcons';
+import { MotivasiIcon } from './src/components/Icons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider, useLocale } from './src/i18n/LanguageContext';
 
@@ -74,6 +76,14 @@ function TabNavigator() {
         options={{
           tabBarLabel: t('tabPrayer'),
           tabBarIcon: ({ color, size }) => <MosqueIcon color={color} size={size - 4} />,
+        }}
+      />
+      <Tab.Screen
+        name="Motivation"
+        component={MotivationScreen}
+        options={{
+          tabBarLabel: t('tabMotivasi'),
+          tabBarIcon: ({ color, size }) => <MotivasiIcon color={color} size={size - 4} />,
         }}
       />
       <Tab.Screen
