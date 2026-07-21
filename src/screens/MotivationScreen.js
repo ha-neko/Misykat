@@ -1,98 +1,180 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Platform,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAllCategories, getFavorites, toggleFavorite } from '../utils/motivations';
+import {
+  getShuffled, getSubcategories, getCategoryLabel, getCategories,
+  getFavorites, getFavIds, toggleFavorite,
+} from '../utils/motivations';
 import { BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 
+const PAGE_SIZE = 6;
+const MAX_CACHE = 10;
+
 export default function MotivationScreen() {
   const { colors } = useTheme();
   const { t } = useLocale();
-  const categories = getAllCategories();
+  const cats = getCategories();
   const [activeTab, setActiveTab] = useState('pekerjaan');
-  const [activeSub, setActiveSub] = useState(null);
+  const [items, setItems] = useState([]);
+  const [shownIds, setShownIds] = useState(new Set());
+  const [pool, setPool] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [favIds, setFavIds] = useState(new Set());
   const [favorites, setFavorites] = useState([]);
-  const [favSet, setFavSet] = useState(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { loadFavorites(); }, []);
 
+  useEffect(() => {
+    if (activeTab !== '_fav') {
+      refreshPool();
+    }
+  }, [activeTab]);
+
   async function loadFavorites() {
-    const favs = await getFavorites();
-    setFavorites(favs);
-    setFavSet(new Set(favs.map(f => f.id)));
+    const ids = await getFavIds();
+    setFavIds(new Set(ids));
+    setFavorites(await getFavorites());
   }
 
-  async function handleFavorite(id) {
+  function refreshPool() {
+    const shuffled = getShuffled(activeTab);
+    setPool(shuffled);
+    setShownIds(new Set());
+    setItems(shuffled.slice(0, PAGE_SIZE));
+    setShownIds(new Set(shuffled.slice(0, PAGE_SIZE).map(i => i.id)));
+  }
+
+  function loadMore() {
+    const available = pool.filter(i => !shownIds.has(i.id));
+    if (available.length === 0) {
+      const reshuffled = getShuffled(activeTab);
+      setPool(reshuffled);
+      const keep = items.slice(-MAX_CACHE);
+      const keepIds = new Set(keep.map(i => i.id));
+      const newItems = reshuffled.filter(i => !keepIds.has(i.id)).slice(0, PAGE_SIZE);
+      if (newItems.length > 0) {
+        setItems(prev => [...prev, ...newItems]);
+        setShownIds(prev => {
+          const merged = new Set(prev);
+          newItems.forEach(i => merged.add(i.id));
+          return merged;
+        });
+      }
+      return;
+    }
+    const next = available.slice(0, PAGE_SIZE);
+    setItems(prev => [...prev, ...next]);
+    setShownIds(prev => {
+      const merged = new Set(prev);
+      next.forEach(i => merged.add(i.id));
+      return merged;
+    });
+  }
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadFavorites();
+    refreshPool();
+    setRefreshing(false);
+  }, [activeTab]);
+
+  async function handleFav(id) {
     await toggleFavorite(id);
     await loadFavorites();
+    setItems(prev => prev.map(i => i.id === id ? { ...i, _favToggled: true } : i));
   }
 
-  const current = categories.find(c => c.key === activeTab);
-  const showingSub = activeSub || (current?.sub[0]?.key || null);
-  const currentSub = current?.sub.find(s => s.key === showingSub);
+  const isFavTab = activeTab === '_fav';
 
-  const isFavTab = activeTab === '_favorites';
-  const s = makeStyles(colors);
-
-  function renderContent(item, small) {
-    const isFav = favSet.has(item.id);
+  function renderItem({ item }) {
+    const isFav = favIds.has(item.id);
     return (
       <TouchableOpacity
-        key={item.id}
-        style={s.contentCard}
+        style={s.card}
         onPress={() => setSelectedItem(item)}
         activeOpacity={0.85}
       >
-        <View style={s.contentTop}>
-          <Text style={s.contentTitle} numberOfLines={small ? 2 : undefined}>{item.title}</Text>
-          <TouchableOpacity onPress={() => handleFavorite(item.id)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <View style={s.cardTop}>
+          <View style={s.cardLabelRow}>
+            <View style={s.subBadge}>
+              <Text style={s.subBadgeText}>{item.sub}</Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
             {isFav ? <BookmarkFillIcon color={colors.accent} size={20} /> : <BookmarkIcon color={colors.outline} size={20} />}
           </TouchableOpacity>
         </View>
-        {!small && (
-          <>
-            <Text style={s.contentQuote} numberOfLines={3}>{item.quote}</Text>
-            <Text style={s.contentSource}>{item.source}</Text>
-          </>
-        )}
+        <Text style={s.cardTitle}>{item.title}</Text>
+        <Text style={s.cardQuote} numberOfLines={2}>{item.quote}</Text>
+        <Text style={s.cardSource}>{item.source}</Text>
       </TouchableOpacity>
     );
   }
 
+  function renderFavItem({ item }) {
+    const isFav = favIds.has(item.id);
+    return (
+      <TouchableOpacity
+        style={s.card}
+        onPress={() => setSelectedItem(item)}
+        activeOpacity={0.85}
+      >
+        <View style={s.cardTop}>
+          <View style={s.cardLabelRow}>
+            <View style={s.subBadge}><Text style={s.subBadgeText}>{item.sub}</Text></View>
+            <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
+          </View>
+          <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+            {isFav ? <BookmarkFillIcon color={colors.accent} size={20} /> : <BookmarkIcon color={colors.outline} size={20} />}
+          </TouchableOpacity>
+        </View>
+        <Text style={s.cardTitle}>{item.title}</Text>
+        <Text style={s.cardQuote} numberOfLines={2}>{item.quote}</Text>
+        <Text style={s.cardSource}>{item.source}</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  const s = makeStyles(colors);
+
   return (
     <SafeAreaView style={s.container} edges={['top']}>
       <View style={s.topDecoration}>
-        <View style={s.decoDot} />
-        <View style={s.decoDot} />
-        <View style={s.decoDot} />
+        <View style={s.decoDot} /><View style={s.decoDot} /><View style={s.decoDot} />
       </View>
       <View style={s.header}>
         <Text style={s.pageTitle}>{t('motivation')}</Text>
       </View>
 
       <View style={s.tabRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabScroll}>
-          {categories.map(c => (
-            <TouchableOpacity
-              key={c.key}
-              style={[s.tab, activeTab === c.key && s.tabActive]}
-              onPress={() => { setActiveTab(c.key); setActiveSub(null); }}
-            >
-              <Text style={[s.tabText, activeTab === c.key && s.tabTextActive]}>{c.label}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={[s.tab, isFavTab && s.tabActive]}
-            onPress={() => setActiveTab('_favorites')}
-          >
-            <BookmarkIcon color={isFavTab ? colors.onPrimary : colors.outline} size={14} />
-            <Text style={[s.tabText, isFavTab && s.tabTextActive]}>Favorit</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.tabScroll}
+          data={[...cats, '_fav']}
+          keyExtractor={i => i}
+          renderItem={({ item }) => {
+            const active = activeTab === item;
+            return (
+              <TouchableOpacity
+                style={[s.tab, active && s.tabActive]}
+                onPress={() => setActiveTab(item)}
+              >
+                {item === '_fav' ? (
+                  <BookmarkIcon color={active ? colors.onPrimary : colors.outline} size={14} />
+                ) : null}
+                <Text style={[s.tabText, active && s.tabTextActive]}>
+                  {item === '_fav' ? 'Favorit' : getCategoryLabel(item)}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
       </View>
 
       {isFavTab ? (
@@ -103,26 +185,29 @@ export default function MotivationScreen() {
             <Text style={s.emptyHint}>{t('noFavoritesHint')}</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
-            {favorites.map(item => renderContent(item, false))}
-          </ScrollView>
+          <FlatList
+            data={favorites}
+            keyExtractor={i => i.id}
+            renderItem={renderFavItem}
+            contentContainerStyle={s.list}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            showsVerticalScrollIndicator={false}
+          />
         )
       ) : (
-        <ScrollView contentContainerStyle={s.list} showsVerticalScrollIndicator={false}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.subRow}>
-            {current?.sub.map(sub => (
-              <TouchableOpacity
-                key={sub.key}
-                style={[s.subChip, showingSub === sub.key && s.subChipActive]}
-                onPress={() => setActiveSub(sub.key)}
-              >
-                <Text style={[s.subChipText, showingSub === sub.key && s.subChipTextActive]}>{sub.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {currentSub?.items.map(item => renderContent(item, false))}
-        </ScrollView>
+        <FlatList
+          data={items}
+          keyExtractor={(item, idx) => `${item.id}-${idx}`}
+          renderItem={renderItem}
+          contentContainerStyle={s.list}
+          onEndReached={loadMore}
+          onEndReachedThreshold={2}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={() => items.length > 0 ? <View style={{ height: 24 }} /> : null}
+        />
       )}
 
       <Modal visible={!!selectedItem} transparent animationType="fade">
@@ -130,16 +215,23 @@ export default function MotivationScreen() {
           <View style={s.modal}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>{selectedItem?.title}</Text>
-              <TouchableOpacity onPress={() => setSelectedItem(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <TouchableOpacity onPress={() => setSelectedItem(null)} hitSlop={12}>
                 <Text style={s.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={s.modalQuote}>{selectedItem?.quote}</Text>
-              <Text style={s.modalSource}>{selectedItem?.source}</Text>
-              <View style={s.modalDivider} />
-              <Text style={s.modalContent}>{selectedItem?.content}</Text>
-            </ScrollView>
+            <FlatList
+              data={[selectedItem]}
+              keyExtractor={i => i.id}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <View>
+                  <Text style={s.modalQuote}>{item.quote}</Text>
+                  <Text style={s.modalSource}>{item.source}</Text>
+                  <View style={s.modalDivider} />
+                  <Text style={s.modalContent}>{item.content}</Text>
+                </View>
+              )}
+            />
           </View>
         </View>
       </Modal>
@@ -149,53 +241,40 @@ export default function MotivationScreen() {
 
 const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  topDecoration: {
-    flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 4, paddingBottom: 2,
-  },
-  decoDot: {
-    width: 4, height: 4, borderRadius: 2, backgroundColor: c.accent, opacity: 0.3,
-  },
-  header: {
-    paddingHorizontal: 16, paddingVertical: 12,
-  },
+  topDecoration: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: 4, paddingBottom: 2 },
+  decoDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.accent, opacity: 0.3 },
+  header: { paddingHorizontal: 16, paddingVertical: 12 },
   pageTitle: { fontSize: 22, fontWeight: '700', color: c.onSurface },
-  tabRow: {
-    borderBottomWidth: 1, borderBottomColor: c.borderLight, marginBottom: 4,
-  },
-  tabScroll: { paddingHorizontal: 12, gap: 4, paddingBottom: 8 },
+  tabRow: { borderBottomWidth: 1, borderBottomColor: c.borderLight },
+  tabScroll: { paddingHorizontal: 12, gap: 6, paddingBottom: 10, paddingTop: 2 },
   tab: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.borderLight,
   },
   tabActive: { backgroundColor: c.primary, borderColor: c.primary },
   tabText: { fontSize: 13, fontWeight: '600', color: c.onSurfaceVariant },
   tabTextActive: { color: c.onPrimary },
   list: { padding: 16, paddingBottom: 40 },
-  subRow: { gap: 8, marginBottom: 16 },
-  subChip: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12,
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.borderLight,
-  },
-  subChipActive: { backgroundColor: c.primaryContainer, borderColor: c.primary },
-  subChipText: { fontSize: 12, fontWeight: '500', color: c.onSurfaceVariant },
-  subChipTextActive: { color: c.primary, fontWeight: '600' },
-  contentCard: {
-    backgroundColor: c.surface, borderRadius: 16, padding: 16, marginBottom: 12,
+  card: {
+    backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 12,
     borderWidth: 1, borderColor: c.borderLight,
     ...Platform.select({
       ios: { shadowColor: c.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 1 },
     }),
   },
-  contentTop: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12,
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  cardLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  subBadge: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    backgroundColor: c.primaryContainer,
   },
-  contentTitle: { fontSize: 16, fontWeight: '600', color: c.onSurface, flex: 1 },
-  contentQuote: {
-    fontSize: 13, color: c.onSurfaceVariant, fontStyle: 'italic', marginTop: 8, lineHeight: 19,
-  },
-  contentSource: { fontSize: 11, color: c.accent, marginTop: 4, fontWeight: '500' },
+  subBadgeText: { fontSize: 10, fontWeight: '600', color: c.primary },
+  catLabel: { fontSize: 10, color: c.onSurfaceVariant, fontWeight: '500' },
+  cardTitle: { fontSize: 16, fontWeight: '600', color: c.onSurface, marginBottom: 6 },
+  cardQuote: { fontSize: 13, color: c.onSurfaceVariant, fontStyle: 'italic', lineHeight: 19 },
+  cardSource: { fontSize: 11, color: c.accent, marginTop: 5, fontWeight: '500' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80, gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: c.onSurfaceVariant, marginTop: 12 },
   emptyHint: { fontSize: 13, color: c.outline, textAlign: 'center', paddingHorizontal: 48, lineHeight: 18 },
@@ -214,9 +293,7 @@ const makeStyles = (c) => StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '700', color: c.onSurface, flex: 1, marginRight: 16 },
   modalClose: { fontSize: 20, color: c.outline, fontWeight: '600' },
-  modalQuote: {
-    fontSize: 15, color: c.onSurfaceVariant, fontStyle: 'italic', lineHeight: 23,
-  },
+  modalQuote: { fontSize: 15, color: c.onSurfaceVariant, fontStyle: 'italic', lineHeight: 23 },
   modalSource: { fontSize: 12, color: c.accent, marginTop: 6, fontWeight: '500' },
   modalDivider: { height: 1, backgroundColor: c.borderLight, marginVertical: 16 },
   modalContent: { fontSize: 14, color: c.onSurface, lineHeight: 22 },
