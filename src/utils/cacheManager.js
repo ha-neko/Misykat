@@ -106,6 +106,24 @@ export async function getCachedAudio(cacheKey, url) {
   return { uri: localPath, fromCache: false };
 }
 
+export async function getCacheSize() {
+  try {
+    const info = await FileSystem.getInfoAsync(CACHE_DIR);
+    if (!info.exists) return 0;
+    const files = await FileSystem.readDirectoryAsync(CACHE_DIR);
+    let total = 0;
+    for (const f of files) {
+      try {
+        const fi = await FileSystem.getInfoAsync(CACHE_DIR + f);
+        if (fi.exists && fi.size) total += fi.size;
+      } catch {}
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
 export async function clearAudioCache() {
   try {
     await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });

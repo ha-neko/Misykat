@@ -57,6 +57,13 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Aplikasi membutuhkan lokasi untuk menentukan waktu sholat."
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Izinkan Misykat menyimpan wallpaper ke galeri.",
+          "savePhotosPermission": "Izinkan Misykat menyimpan wallpaper ke galeri."
+        }
       ]
     ],
     "extra": {

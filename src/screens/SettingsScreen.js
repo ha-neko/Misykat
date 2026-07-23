@@ -5,13 +5,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { clearAudioCache } from '../utils/cacheManager';
+import { clearAudioCache, getCacheSize } from '../utils/cacheManager';
 import { getUserProfile } from '../utils/recommendation';
 import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
-import { SunIcon, CrescentIcon, GlobeIcon } from '../components/Icons';
+import { SunIcon, CrescentIcon, GlobeIcon, PencilIcon } from '../components/Icons';
 
 const USERNAME_KEY = 'app_username';
 
@@ -33,12 +32,8 @@ export default function SettingsScreen() {
       const name = await AsyncStorage.getItem(USERNAME_KEY);
       if (name) setUsername(name);
 
-      const dir = FileSystem.documentDirectory + 'audio_cache/';
-      const info = await FileSystem.getInfoAsync(dir);
-      if (info.exists && info.size) {
-        const size = info.size;
-        setCacheSize(size > 1048576 ? `${(size / 1048576).toFixed(1)} MB` : `${(size / 1024).toFixed(0)} KB`);
-      }
+      const total = await getCacheSize();
+      setCacheSize(total > 1048576 ? `${(total / 1048576).toFixed(1)} MB` : `${(total / 1024).toFixed(0)} KB`);
     } catch {}
   }
 
@@ -87,7 +82,7 @@ export default function SettingsScreen() {
               <Text style={[s.rowValue, !username && s.rowPlaceholder]}>
                 {username || t('setUsername')}
               </Text>
-              <Text style={s.arrow}>→</Text>
+              <PencilIcon color={colors.outline} size={16} />
             </View>
           </TouchableOpacity>
 
@@ -242,7 +237,7 @@ const makeStyles = (c) => StyleSheet.create({
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rowValue: { fontSize: 14, color: c.onSurfaceVariant },
   rowPlaceholder: { color: c.outline, fontStyle: 'italic' },
-  arrow: { fontSize: 16, color: c.outline },
+
   divider: { height: 1, backgroundColor: c.borderLight, marginHorizontal: 16 },
   statsRow: {
     flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.borderLight,

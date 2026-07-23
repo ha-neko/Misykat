@@ -127,11 +127,30 @@ export function BookmarkFillIcon({ color = '#707973', size = 24 }) {
   );
 }
 
+export function DownloadIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.2" />
+      <Path d="M8 11l4 4 4-4" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 15V7" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function PencilIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function MotivasiIcon({ color = '#707973', size = 24 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M9 5H5a1 1 0 00-1 1v6a1 1 0 001 1h2l2 3v-3h1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M15 5h4a1 1 0 011 1v6a1 1 0 01-1 1h-2l-2 3v-3h-1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 2a7 7 0 00-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A6.99 6.99 0 0019 9a7 7 0 00-7-7z" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M9 21h6M12 17v4" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+      <Path d="M10 8.5l1.5 1.5L14 7" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
