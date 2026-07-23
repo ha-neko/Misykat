@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, StatusBar,
   Dimensions, Image, ActivityIndicator, Alert, Animated,
@@ -51,14 +51,31 @@ export default function MotivationScreen() {
   // init pool when tab changes
   useEffect(() => {
     if (activeTab === '_fav') return;
+    let mounted = true;
+    loadingRef.current = false;
+    resetSeen();
+    if (mounted) setItems([]);
     (async () => {
-      loadingRef.current = false;
-      resetSeen();
-      setItems([]);
-      const batch = await fetchBatch(activeTab, PAGE_SIZE);
-      batch.forEach(v => markSeen(v.id));
-      setItems(batch);
+      try {
+        const batch = await fetchBatch(activeTab, PAGE_SIZE);
+        if (!mounted) return;
+        if (batch.length > 0) {
+          batch.forEach(v => markSeen(v.id));
+          setItems(batch);
+        } else {
+          // retry once with small delay
+          const retry = await fetchBatch(activeTab, PAGE_SIZE);
+          if (!mounted) return;
+          if (retry.length > 0) {
+            retry.forEach(v => markSeen(v.id));
+            setItems(retry);
+          }
+        }
+      } catch {
+        // silent
+      }
     })();
+    return () => { mounted = false; };
   }, [activeTab]);
 
   // preload images
@@ -66,27 +83,32 @@ export default function MotivationScreen() {
     items.forEach(i => Image.prefetch(getWallpaperUrl(i)));
   }, [items]);
 
+  const tabRef = useRef(activeTab);
+  tabRef.current = activeTab;
+
   async function loadMore() {
     if (loadingRef.current) return;
     loadingRef.current = true;
     try {
-      const verse = await fetchOne(activeTab);
+      const verse = await fetchOne(tabRef.current);
       if (verse) {
         markSeen(verse.id);
         setItems(prev => [...prev, verse]);
       }
+    } catch {
+      // ignore fetch errors
     } finally {
       loadingRef.current = false;
     }
   }
 
-  function handleScroll(e) {
+  const handleScroll = useCallback((e) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const distFromEnd = contentSize.height - contentOffset.y - layoutMeasurement.height;
     if (distFromEnd < SCREEN_H * 0.4 && !loadingRef.current) {
       loadMore();
     }
-  }
+  }, []);
 
   async function loadFavs() {
     const ids = await getFavIds();
@@ -159,6 +181,10 @@ export default function MotivationScreen() {
     const isLoading = loadingImg[item.id];
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const [imgLoaded, setImgLoaded] = useState(false);
+    const sub = item.sub || 'renungan';
+    const quote = item.quote || '';
+    const source = item.source || '';
+    const title = item.title || '';
 
     useEffect(() => {
       Image.prefetch(imgLg);
@@ -182,7 +208,7 @@ export default function MotivationScreen() {
           <SafeAreaView style={s.pageInner} edges={['top']}>
             <View style={s.topRow}>
               <View style={s.pillRow}>
-                <View style={s.pill}><Text style={s.pillText}>{item.sub}</Text></View>
+                <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
                 {isFav && <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>}
               </View>
               <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
@@ -194,13 +220,13 @@ export default function MotivationScreen() {
             </View>
             <View style={s.quoteWrap}>
               <Text style={s.quoteIcon}>&#x201C;</Text>
-              <Text style={s.quoteText}>{item.quote}</Text>
-              <Text style={s.sourceText}>{item.source}</Text>
+              <Text style={s.quoteText}>{quote}</Text>
+              <Text style={s.sourceText}>{source}</Text>
             </View>
             <View style={s.divider} />
             <View style={s.bottomRow}>
               <View style={s.titleBlock}>
-                <Text style={s.titleText}>{item.title}</Text>
+                <Text style={s.titleText}>{title}</Text>
               </View>
               <TouchableOpacity
                 style={s.dlBtn}
