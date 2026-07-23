@@ -7,30 +7,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import {
-  getShuffled, getCategories, getCategoryLabel,
-  getFavorites, getFavIds, toggleFavorite,
+  getCategories, getCategoryLabel,
+  getFavIds, toggleFavorite,
+  markSeen, resetSeen, fetchBatch, fetchOne,
+  getCachedVerse,
 } from '../utils/motivations';
 import { BookmarkIcon, BookmarkFillIcon, DownloadIcon } from '../components/Icons';
-import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 6;
-const MAX_CACHE = 10;
 
 const KEYWORDS = {
   pekerjaan: 'business,office,architecture,city',
   keluarga: 'family,home,people,nature',
   umum: 'nature,life,landscape,mountain',
+  ibadah: 'mosque,light,stars,sky',
 };
-
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
 
 function getWallpaperUrl(item, w, h) {
   const kw = KEYWORDS[item.cat] || 'nature';
@@ -42,87 +35,65 @@ function getWallpaperUrl(item, w, h) {
 }
 
 export default function MotivationScreen() {
-  const { colors } = useTheme();
   const { t } = useLocale();
   const cats = getCategories();
   const listRef = useRef(null);
-  const poolRef = useRef([]);
-  const recentRef = useRef([]);
-  const currentTab = useRef('pekerjaan');
-  const [loadingImg, setLoadingImg] = useState({});
+  const loadingRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState('pekerjaan');
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
+  const [loadingImg, setLoadingImg] = useState({});
 
   useEffect(() => { loadFavs(); }, []);
 
+  // init pool when tab changes
   useEffect(() => {
-    // preload last 2 items (newly loaded batch)
-    const len = items.length;
-    if (len > PAGE_SIZE) {
-      for (let i = len - PAGE_SIZE; i < len; i++) {
-        Image.prefetch(getWallpaperUrl(items[i]));
-      }
-    } else {
-      items.forEach(i => Image.prefetch(getWallpaperUrl(i)));
-    }
-  }, [items]);
-
-  useEffect(() => {
-    if (activeTab !== '_fav') {
-      currentTab.current = activeTab;
-      initPool(activeTab);
-    }
+    if (activeTab === '_fav') return;
+    (async () => {
+      loadingRef.current = false;
+      resetSeen();
+      setItems([]);
+      const batch = await fetchBatch(activeTab, PAGE_SIZE);
+      batch.forEach(v => markSeen(v.id));
+      setItems(batch);
+    })();
   }, [activeTab]);
 
-  async function loadFavs() {
-    const ids = await getFavIds();
-    setFavIdsState(new Set(ids));
-    setFavItems(await getFavorites());
-  }
+  // preload images
+  useEffect(() => {
+    items.forEach(i => Image.prefetch(getWallpaperUrl(i)));
+  }, [items]);
 
-  function initPool(cat) {
-    loadingMoreRef.current = false;
-    const shuffled = shuffle(getShuffled(cat));
-    poolRef.current = shuffled;
-    recentRef.current = [];
-    setItems(shuffled.slice(0, PAGE_SIZE));
-    shuffled.slice(0, PAGE_SIZE).forEach(i => recentRef.current.push(i.id));
-  }
-
-  const loadingMoreRef = useRef(false);
-
-  function loadMore() {
-    if (loadingMoreRef.current) return;
-    loadingMoreRef.current = true;
-
-    const recent = recentRef.current;
-    const available = poolRef.current.filter(i => !recent.includes(i.id));
-    if (available.length === 0) {
-      poolRef.current = shuffle(getShuffled(currentTab.current));
-      recentRef.current = [];
-      const fresh = poolRef.current.slice(0, PAGE_SIZE);
-      setItems(prev => [...prev, ...fresh]);
-      fresh.forEach(i => recentRef.current.push(i.id));
-      loadingMoreRef.current = false;
-      return;
+  async function loadMore() {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const verse = await fetchOne(activeTab);
+      if (verse) {
+        markSeen(verse.id);
+        setItems(prev => [...prev, verse]);
+      }
+    } finally {
+      loadingRef.current = false;
     }
-    const next = available.slice(0, PAGE_SIZE);
-    setItems(prev => [...prev, ...next]);
-    const newRecent = [...recentRef.current, ...next.map(i => i.id)];
-    if (newRecent.length > MAX_CACHE) newRecent.splice(0, newRecent.length - MAX_CACHE);
-    recentRef.current = newRecent;
-    loadingMoreRef.current = false;
   }
 
   function handleScroll(e) {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const distFromEnd = contentSize.height - contentOffset.y - layoutMeasurement.height;
-    if (distFromEnd < SCREEN_H * 0.4 && !loadingMoreRef.current) {
+    if (distFromEnd < SCREEN_H * 0.4 && !loadingRef.current) {
       loadMore();
     }
+  }
+
+  async function loadFavs() {
+    const ids = await getFavIds();
+    setFavIdsState(new Set(ids));
+    // resolve cached items for display
+    const resolved = ids.map(id => getCachedVerse(id)).filter(Boolean);
+    setFavItems(resolved);
   }
 
   async function handleFav(id) {
@@ -153,7 +124,6 @@ export default function MotivationScreen() {
       const filename = `misykat-${item.id}.jpg`;
       const dest = FileSystem.documentDirectory + filename;
 
-      // Try downloadAsync first, fall back to fetch+base64
       let savedUri;
       try {
         const dl = await FileSystem.downloadAsync(url, dest);
@@ -308,6 +278,14 @@ export default function MotivationScreen() {
           />
         )
       ) : (
+        items.length === 0 ? (
+          <View style={[s.page, { backgroundColor: '#0d0d0d' }]}>
+            <View style={s.centerOverlay}>
+              <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
+              <Text style={s.loadingText}>Memuat...</Text>
+            </View>
+          </View>
+        ) : (
           <FlatList
             ref={listRef}
             data={items}
@@ -324,6 +302,7 @@ export default function MotivationScreen() {
             })}
             removeClippedSubviews={false}
           />
+        )
       )}
     </View>
   );
@@ -343,6 +322,12 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'space-between',
   },
+  centerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', alignItems: 'center', gap: 12,
+  },
+  loadingText: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
   pageInner: { flex: 1, paddingHorizontal: 28, paddingBottom: 32 },
   topRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
