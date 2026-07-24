@@ -12,6 +12,7 @@ import {
   markSeen, resetSeen, fetchBatch, fetchOne,
   getCachedVerse,
 } from '../utils/motivations';
+import { captureError } from '../utils/errorLog';
 import { BookmarkIcon, BookmarkFillIcon, DownloadIcon } from '../components/Icons';
 import { useLocale } from '../i18n/LanguageContext';
 
@@ -431,7 +432,7 @@ class MotivationScreenErrorBoundary extends Component {
     return { error };
   }
   componentDidCatch(error, info) {
-    console.warn('MotivationScreen crash:', error?.message, info?.componentStack);
+    captureError(error, `MotivationScreen\n${info?.componentStack || ''}`);
   }
   render() {
     if (this.state.error) {

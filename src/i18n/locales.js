@@ -111,6 +111,17 @@ export const id = {
   motivation: 'Motivasi',
   noFavorites: 'Belum Ada Favorit',
   noFavoritesHint: 'Tap icon bookmark pada motivasi untuk menyimpannya',
+
+  // Error Log
+  errorLog: 'Log Error',
+  errorLogEmpty: 'Tidak ada error tercatat',
+  errorCount: 'error',
+  copyReport: 'Salin Laporan',
+  copied: 'Tersalin',
+  reportToDev: 'Laporkan ke Developer',
+  reportHint: 'Salin laporan error dan kirim ke developer',
+  clearErrors: 'Hapus Log',
+  errorsCleared: 'Log error dihapus',
 };
 
 export const en = {
@@ -215,4 +226,14 @@ export const en = {
   motivation: 'Motivation',
   noFavorites: 'No Favorites',
   noFavoritesHint: 'Tap the bookmark icon on a motivation to save it',
+
+  errorLog: 'Error Log',
+  errorLogEmpty: 'No errors recorded',
+  errorCount: 'error',
+  copyReport: 'Copy Report',
+  copied: 'Copied',
+  reportToDev: 'Report to Developer',
+  reportHint: 'Copy error report and send to developer',
+  clearErrors: 'Clear Log',
+  errorsCleared: 'Error log cleared',
 };

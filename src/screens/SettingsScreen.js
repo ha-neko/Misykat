@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch,
-  TextInput, Modal, Platform,
+  TextInput, Modal, Platform, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearAudioCache, getCacheSize } from '../utils/cacheManager';
 import { getUserProfile } from '../utils/recommendation';
+import { getErrors, clearErrors, formatReport } from '../utils/errorLog';
 import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
-import { SunIcon, CrescentIcon, GlobeIcon, PencilIcon } from '../components/Icons';
+import { SunIcon, CrescentIcon, GlobeIcon, PencilIcon, WarningIcon } from '../components/Icons';
 
 const USERNAME_KEY = 'app_username';
 
@@ -22,8 +24,16 @@ export default function SettingsScreen() {
   const [username, setUsername] = useState('');
   const [showNameModal, setShowNameModal] = useState(false);
   const [tempName, setTempName] = useState('');
+  const [errorLog, setErrorLog] = useState([]);
 
   useEffect(() => { loadInfo(); }, []);
+
+  // refresh errors every time Settings tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      setErrorLog(getErrors());
+    }, [])
+  );
 
   async function loadInfo() {
     try {
@@ -156,6 +166,80 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {errorLog.length > 0 && (
+          <>
+            <Text style={s.sectionHeader}>
+              {t('errorLog')} ({errorLog.length} {t('errorCount')})
+            </Text>
+            <View style={s.card}>
+              <TouchableOpacity
+                style={s.errorRow}
+                onPress={() => {
+                  const report = formatReport();
+                  Share.share({ message: report, title: 'Misykat Error Report' });
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={s.rowLeft}>
+                  <View style={[s.iconWrap, { backgroundColor: '#3a1a1a' }]}>
+                    <WarningIcon color="#ff6b6b" size={18} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.rowLabel}>{t('reportToDev')}</Text>
+                    <Text style={s.rowHint}>{t('reportHint')}</Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 12, color: '#ff6b6b', fontWeight: '600' }}>
+                  {errorLog.length}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={s.divider} />
+
+              {/* latest error preview */}
+              <View style={s.errorPreview}>
+                <Text style={s.errorTime}>
+                  {new Date(errorLog[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                <Text style={s.errorMsg} numberOfLines={2}>
+                  {errorLog[0].message}
+                </Text>
+              </View>
+
+              {errorLog.length > 1 && (
+                <>
+                  <View style={s.divider} />
+                  <TouchableOpacity
+                    style={s.showAllBtn}
+                    onPress={() => {
+                      const report = formatReport();
+                      Share.share({ message: report, title: 'Misykat Error Report' });
+                    }}
+                  >
+                    <Text style={s.showAllText}>
+                      Lihat semua {errorLog.length} error
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <View style={s.divider} />
+
+              <TouchableOpacity
+                style={[s.actionBtn, { backgroundColor: '#2a1010' }]}
+                onPress={async () => {
+                  await clearErrors();
+                  refreshErrors();
+                  Alert.alert(t('success'), t('errorsCleared'));
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.actionBtnText, { color: '#ff6b6b' }]}>{t('clearErrors')}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         <Text style={s.sectionHeader}>{t('about')}</Text>
         <View style={s.card}>
           <View style={s.row}>
@@ -248,6 +332,25 @@ const makeStyles = (c) => StyleSheet.create({
   statLabel: { fontSize: 11, color: c.onSurfaceVariant, marginTop: 2 },
   langBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   langText: { fontSize: 14, color: c.primary, fontWeight: '500' },
+  errorRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 14, paddingHorizontal: 16, minHeight: 48,
+  },
+  errorPreview: {
+    paddingVertical: 10, paddingHorizontal: 16,
+  },
+  errorTime: {
+    fontSize: 11, color: c.onSurfaceVariant, fontWeight: '600', marginBottom: 4,
+  },
+  errorMsg: {
+    fontSize: 13, color: '#ff6b6b', lineHeight: 18, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  showAllBtn: {
+    paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center',
+  },
+  showAllText: {
+    fontSize: 13, color: c.primary, fontWeight: '600',
+  },
   actionBtn: {
     marginHorizontal: 16, marginBottom: 12, padding: 12,
     backgroundColor: c.errorContainer, borderRadius: 10, alignItems: 'center',

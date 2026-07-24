@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { captureError, loadErrors } from './src/utils/errorLog';
 import HomeScreen from './src/screens/HomeScreen';
 import AddAlarmScreen from './src/screens/AddAlarmScreen';
 import EditAlarmScreen from './src/screens/EditAlarmScreen';
@@ -20,6 +21,22 @@ import { AlarmIcon, AddIcon, MosqueIcon, SettingsIcon } from './src/components/T
 import { MotivasiIcon } from './src/components/Icons';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider, useLocale } from './src/i18n/LanguageContext';
+
+// ---- global error handlers ----
+(function setupErrorHandlers() {
+  // capture unhandled JS exceptions (ErrorUtils is a global in RN)
+  const EU = global.ErrorUtils;
+  if (EU?.getGlobalHandler) {
+    const orig = EU.getGlobalHandler();
+    EU.setGlobalHandler((error, isFatal) => {
+      captureError(error, isFatal ? 'fatal' : 'non-fatal');
+      if (orig) orig(error, isFatal);
+    });
+  }
+
+  // restore persisted errors on load
+  loadErrors();
+})();
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();

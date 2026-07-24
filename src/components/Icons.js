@@ -154,3 +154,13 @@ export function MotivasiIcon({ color = '#707973', size = 24 }) {
     </Svg>
   );
 }
+
+export function WarningIcon({ color = '#707973', size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 3L2 21h20L12 3z" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 9v4" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+      <Circle cx="12" cy="17" r="0.5" fill={color} stroke={color} strokeWidth="0.5" />
+    </Svg>
+  );
+}
