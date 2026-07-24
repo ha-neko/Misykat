@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { Component, useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, StatusBar,
   Dimensions, Image, ActivityIndicator, Alert, Animated,
@@ -36,7 +36,7 @@ function getWallpaperUrl(item, w, h) {
   return `https://picsum.photos/seed/${base}-${item.id}/${width}/${height}`;
 }
 
-export default function MotivationScreen() {
+function MotivationScreen() {
   const { t } = useLocale();
   const cats = getCategories();
   const listRef = useRef(null);
@@ -420,3 +420,38 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.4)' },
   emptyHint: { fontSize: 14, color: 'rgba(255,255,255,0.25)', textAlign: 'center', lineHeight: 20, paddingHorizontal: 48 },
 });
+
+// ---- error boundary ----
+class MotivationScreenErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.warn('MotivationScreen crash:', error?.message, info?.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0d0d0d', justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#ff4444', marginBottom: 12 }}>Terjadi error</Text>
+          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+            {this.state.error?.message || 'Unknown error'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => this.setState({ error: null })}
+            style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)' }}
+          >
+            <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return <MotivationScreen />;
+  }
+}
+
+export default MotivationScreenErrorBoundary;
