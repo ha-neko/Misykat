@@ -26,9 +26,11 @@ const KEYWORDS = {
 };
 
 function getWallpaperUrl(item, w, h) {
+  if (!item || !item.id) return `https://picsum.photos/seed/fallback/${Math.round(SCREEN_W)}/${Math.round(SCREEN_H)}`;
   const kw = KEYWORDS[item.cat] || 'nature';
   const terms = kw.split(',');
-  const base = terms[Math.abs(item.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % terms.length];
+  const idx = Math.abs(item.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % terms.length;
+  const base = terms[idx] || 'nature';
   const width = w || Math.round(SCREEN_W);
   const height = h || Math.round(SCREEN_H);
   return `https://picsum.photos/seed/${base}-${item.id}/${width}/${height}`;
@@ -46,7 +48,7 @@ export default function MotivationScreen() {
   const [favItems, setFavItems] = useState([]);
   const [loadingImg, setLoadingImg] = useState({});
 
-  useEffect(() => { loadFavs(); }, []);
+  useEffect(() => { loadFavs().catch(() => {}); }, []);
 
   // init pool when tab changes
   useEffect(() => {
@@ -80,7 +82,12 @@ export default function MotivationScreen() {
 
   // preload images
   useEffect(() => {
-    items.forEach(i => Image.prefetch(getWallpaperUrl(i)));
+    try {
+      items.forEach(i => {
+        const url = getWallpaperUrl(i);
+        if (url) Image.prefetch(url).catch(() => {});
+      });
+    } catch { /* silent */ }
   }, [items]);
 
   const tabRef = useRef(activeTab);
@@ -119,8 +126,10 @@ export default function MotivationScreen() {
   }
 
   async function handleFav(id) {
-    await toggleFavorite(id);
-    await loadFavs();
+    try {
+      await toggleFavorite(id);
+      await loadFavs();
+    } catch { /* silent */ }
   }
 
   async function blobToBase64(blob) {
@@ -187,7 +196,7 @@ export default function MotivationScreen() {
     const title = item.title || '';
 
     useEffect(() => {
-      Image.prefetch(imgLg);
+      Image.prefetch(imgLg).catch(() => {});
     }, [item.id]);
 
     return (
