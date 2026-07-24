@@ -166,12 +166,12 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {errorLog.length > 0 && (
-          <>
-            <Text style={s.sectionHeader}>
-              {t('errorLog')} ({errorLog.length} {t('errorCount')})
-            </Text>
-            <View style={s.card}>
+        <Text style={s.sectionHeader}>
+          {t('errorLog')} {errorLog.length > 0 && `(${errorLog.length})`}
+        </Text>
+        <View style={s.card}>
+          {errorLog.length > 0 ? (
+            <>
               <TouchableOpacity
                 style={s.errorRow}
                 onPress={() => {
@@ -189,9 +189,6 @@ export default function SettingsScreen() {
                     <Text style={s.rowHint}>{t('reportHint')}</Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 12, color: '#ff6b6b', fontWeight: '600' }}>
-                  {errorLog.length}
-                </Text>
               </TouchableOpacity>
 
               <View style={s.divider} />
@@ -229,16 +226,23 @@ export default function SettingsScreen() {
                 style={[s.actionBtn, { backgroundColor: '#2a1010' }]}
                 onPress={async () => {
                   await clearErrors();
-                  refreshErrors();
+                  setErrorLog(getErrors());
                   Alert.alert(t('success'), t('errorsCleared'));
                 }}
                 activeOpacity={0.7}
               >
                 <Text style={[s.actionBtnText, { color: '#ff6b6b' }]}>{t('clearErrors')}</Text>
               </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{ padding: 24, alignItems: 'center' }}>
+              <WarningIcon color={c.outline} size={32} />
+              <Text style={{ fontSize: 13, color: c.onSurfaceVariant, marginTop: 8 }}>
+                {t('errorLogEmpty')}
+              </Text>
             </View>
-          </>
-        )}
+          )}
+        </View>
 
         <Text style={s.sectionHeader}>{t('about')}</Text>
         <View style={s.card}>
