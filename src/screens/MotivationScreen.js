@@ -6,13 +6,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCategories, getCategoryLabel,
   getFavIds, toggleFavorite,
   markSeen, resetSeen, fetchBatch, fetchOne,
   getCachedVerse,
 } from '../utils/motivations';
-import { captureError } from '../utils/errorLog';
 import { BookmarkIcon, BookmarkFillIcon, DownloadIcon } from '../components/Icons';
 import { useLocale } from '../i18n/LanguageContext';
 
@@ -432,7 +432,21 @@ class MotivationScreenErrorBoundary extends Component {
     return { error };
   }
   componentDidCatch(error, info) {
-    captureError(error, `MotivationScreen\n${info?.componentStack || ''}`);
+    // persist error for Settings screen
+    try {
+      const entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        message: error?.message || String(error || 'unknown'),
+        context: `MotivationScreen\n${info?.componentStack || ''}`,
+        time: Date.now(),
+      };
+      AsyncStorage.getItem('misykat_error_log').then(raw => {
+        const list = raw ? JSON.parse(raw) : [];
+        list.unshift(entry);
+        if (list.length > 50) list.length = 50;
+        AsyncStorage.setItem('misykat_error_log', JSON.stringify(list));
+      }).catch(() => {});
+    } catch { /* silent */ }
   }
   render() {
     if (this.state.error) {

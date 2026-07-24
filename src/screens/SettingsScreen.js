@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch,
   TextInput, Modal, Platform, Share,
@@ -8,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearAudioCache, getCacheSize } from '../utils/cacheManager';
 import { getUserProfile } from '../utils/recommendation';
-import { getErrors, clearErrors, formatReport } from '../utils/errorLog';
 import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
@@ -26,14 +24,35 @@ export default function SettingsScreen() {
   const [tempName, setTempName] = useState('');
   const [errorLog, setErrorLog] = useState([]);
 
-  useEffect(() => { loadInfo(); }, []);
+  useEffect(() => { loadInfo(); loadErrorLog(); }, []);
 
-  // refresh errors every time Settings tab is focused
-  useFocusEffect(
-    useCallback(() => {
-      setErrorLog(getErrors());
-    }, [])
-  );
+  const ERROR_LOG_KEY = 'misykat_error_log';
+
+  async function loadErrorLog() {
+    try {
+      const raw = await AsyncStorage.getItem(ERROR_LOG_KEY);
+      if (raw) setErrorLog(JSON.parse(raw));
+    } catch {}
+  }
+
+  async function clearErrorLog() {
+    try {
+      await AsyncStorage.removeItem(ERROR_LOG_KEY);
+      setErrorLog([]);
+    } catch {}
+  }
+
+  function shareErrors() {
+    if (errorLog.length === 0) {
+      Share.share({ message: 'No errors logged.', title: 'Misykat Error Report' });
+      return;
+    }
+    const report = errorLog.map((e, i) => {
+      const d = new Date(e.time).toLocaleString();
+      return `[${i + 1}] ${d}\n  ${e.context || '—'}\n  ${e.message}`;
+    }).join('\n\n---\n\n');
+    Share.share({ message: report, title: 'Misykat Error Report' });
+  }
 
   async function loadInfo() {
     try {
@@ -174,10 +193,7 @@ export default function SettingsScreen() {
             <>
               <TouchableOpacity
                 style={s.errorRow}
-                onPress={() => {
-                  const report = formatReport();
-                  Share.share({ message: report, title: 'Misykat Error Report' });
-                }}
+                onPress={shareErrors}
                 activeOpacity={0.7}
               >
                 <View style={s.rowLeft}>
@@ -196,7 +212,7 @@ export default function SettingsScreen() {
               {/* latest error preview */}
               <View style={s.errorPreview}>
                 <Text style={s.errorTime}>
-                  {new Date(errorLog[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(errorLog[0].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 <Text style={s.errorMsg} numberOfLines={2}>
                   {errorLog[0].message}
@@ -208,10 +224,7 @@ export default function SettingsScreen() {
                   <View style={s.divider} />
                   <TouchableOpacity
                     style={s.showAllBtn}
-                    onPress={() => {
-                      const report = formatReport();
-                      Share.share({ message: report, title: 'Misykat Error Report' });
-                    }}
+                    onPress={shareErrors}
                   >
                     <Text style={s.showAllText}>
                       Lihat semua {errorLog.length} error
@@ -225,8 +238,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[s.actionBtn, { backgroundColor: '#2a1010' }]}
                 onPress={async () => {
-                  await clearErrors();
-                  setErrorLog(getErrors());
+                  await clearErrorLog();
                   Alert.alert(t('success'), t('errorsCleared'));
                 }}
                 activeOpacity={0.7}
