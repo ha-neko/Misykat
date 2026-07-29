@@ -234,7 +234,39 @@ function AppInner() {
   );
 }
 
-// ---- App-level error boundary (last resort) ----
+// ---- production-safe error handler (prevents force-close from uncaught JS exceptions) ----
+(function setupGlobalHandler() {
+  try {
+    const EU = global.ErrorUtils;
+    if (!EU?.setGlobalHandler) return;
+    const orig = EU.getGlobalHandler();
+    EU.setGlobalHandler((error, isFatal) => {
+      // persist for Settings viewer
+      try {
+        const entry = {
+          id: Date.now().toString(36),
+          message: error?.message || String(error || 'unknown'),
+          time: Date.now(),
+        };
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        AsyncStorage.getItem('misykat_error_log').then(r => {
+          const list = r ? JSON.parse(r) : [];
+          list.unshift(entry);
+          if (list.length > 50) list.length = 50;
+          AsyncStorage.setItem('misykat_error_log', JSON.stringify(list));
+        }).catch(() => {});
+      } catch {}
+
+      // Only let non-fatal errors reach the default handler.
+      // Fatal errors (all errors in production builds) are SUPPRESSED
+      // to prevent force-close. The app may be unstable but at least
+      // it won't crash — error boundary fallbacks handle the UI.
+      if (!isFatal && orig) orig(error, isFatal);
+    });
+  } catch { /* inert */ }
+})();
+
+// ---- App-level error boundary (catches rendering crashes for ALL screens) ----
 class AppErrorBoundary extends Component {
   constructor(props) {
     super(props);

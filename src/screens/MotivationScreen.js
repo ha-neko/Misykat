@@ -1,4 +1,4 @@
-import React, { Component, useEffect, useState, useRef, useCallback } from 'react';
+import React, { Component, useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, StatusBar,
   Dimensions, Image, ActivityIndicator, Alert, Animated,
@@ -13,32 +13,6 @@ import {
 } from '../utils/motivations';
 import { BookmarkIcon, BookmarkFillIcon, DownloadIcon } from '../components/Icons';
 import { useLocale } from '../i18n/LanguageContext';
-
-// Production-safe error handler — prevents force-close
-(function setupHandler() {
-  const EU = global.ErrorUtils;
-  if (EU?.setGlobalHandler) {
-    const orig = EU.getGlobalHandler();
-    EU.setGlobalHandler((error, isFatal) => {
-      // Log to AsyncStorage for later inspection
-      try {
-        const entry = {
-          id: Date.now().toString(36),
-          message: error?.message || String(error),
-          time: Date.now(),
-        };
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        AsyncStorage.getItem('misykat_error_log').then(raw => {
-          const list = raw ? JSON.parse(raw) : [];
-          list.unshift(entry);
-          if (list.length > 50) list.length = 50;
-          AsyncStorage.setItem('misykat_error_log', JSON.stringify(list));
-        }).catch(() => {});
-      } catch {}
-      if (orig) orig(error, isFatal);
-    });
-  }
-})();
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 4;
