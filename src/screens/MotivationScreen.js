@@ -4,8 +4,6 @@ import {
   Dimensions, Image, ActivityIndicator, Alert, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCategories, getCategoryLabel,
@@ -16,8 +14,34 @@ import {
 import { BookmarkIcon, BookmarkFillIcon, DownloadIcon } from '../components/Icons';
 import { useLocale } from '../i18n/LanguageContext';
 
+// Production-safe error handler — prevents force-close
+(function setupHandler() {
+  const EU = global.ErrorUtils;
+  if (EU?.setGlobalHandler) {
+    const orig = EU.getGlobalHandler();
+    EU.setGlobalHandler((error, isFatal) => {
+      // Log to AsyncStorage for later inspection
+      try {
+        const entry = {
+          id: Date.now().toString(36),
+          message: error?.message || String(error),
+          time: Date.now(),
+        };
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        AsyncStorage.getItem('misykat_error_log').then(raw => {
+          const list = raw ? JSON.parse(raw) : [];
+          list.unshift(entry);
+          if (list.length > 50) list.length = 50;
+          AsyncStorage.setItem('misykat_error_log', JSON.stringify(list));
+        }).catch(() => {});
+      } catch {}
+      if (orig) orig(error, isFatal);
+    });
+  }
+})();
+
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 4;
 
 const KEYWORDS = {
   pekerjaan: 'business,office,architecture,city',
@@ -35,6 +59,80 @@ function getWallpaperUrl(item, w, h) {
   const width = w || Math.round(SCREEN_W);
   const height = h || Math.round(SCREEN_H);
   return `https://picsum.photos/seed/${base}-${item.id}/${width}/${height}`;
+}
+
+function MotivationPage({ item, isFav, favIds, handleFav, loadingImg, handleDownload }) {
+  const isFavd = favIds.has(item.id);
+  const imgLg = getWallpaperUrl(item);
+  const isLoading = loadingImg[item.id];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const sub = item.sub || 'renungan';
+  const quote = item.quote || '';
+  const source = item.source || '';
+  const title = item.title || '';
+
+  useEffect(() => {
+    Image.prefetch(imgLg).catch(() => {});
+  }, [item.id]);
+
+  return (
+    <View style={s.page}>
+      <View style={s.placeholderBg} />
+      <Image
+        source={{ uri: imgLg }}
+        style={[s.bgImg, { opacity: fadeAnim }]}
+        resizeMode="cover"
+        onLoad={() => {
+          setImgLoaded(true);
+          try {
+            Animated.timing(fadeAnim, {
+              toValue: 1, duration: 400, useNativeDriver: true,
+            }).start();
+          } catch { /* silent */ }
+        }}
+      />
+      <View style={[s.overlay, !imgLoaded && s.overlaySolid]}>
+        <SafeAreaView style={s.pageInner} edges={['top']}>
+          <View style={s.topRow}>
+            <View style={s.pillRow}>
+              <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
+              {isFav && <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>}
+            </View>
+            <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+              {isFavd
+                ? <BookmarkFillIcon color="#FFD700" size={22} />
+                : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
+              }
+            </TouchableOpacity>
+          </View>
+          <View style={s.quoteWrap}>
+            <Text style={s.quoteIcon}>&#x201C;</Text>
+            <Text style={s.quoteText}>{quote}</Text>
+            <Text style={s.sourceText}>{source}</Text>
+          </View>
+          <View style={s.divider} />
+          <View style={s.bottomRow}>
+            <View style={s.titleBlock}>
+              <Text style={s.titleText}>{title}</Text>
+            </View>
+            <TouchableOpacity
+              style={s.dlBtn}
+              onPress={() => handleDownload(item)}
+              disabled={isLoading}
+              activeOpacity={0.7}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <DownloadIcon color="#fff" size={20} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    </View>
+  );
 }
 
 function MotivationScreen() {
@@ -110,13 +208,13 @@ function MotivationScreen() {
     }
   }
 
-  const handleScroll = useCallback((e) => {
+  function handleScroll(e) {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
     const distFromEnd = contentSize.height - contentOffset.y - layoutMeasurement.height;
     if (distFromEnd < SCREEN_H * 0.4 && !loadingRef.current) {
       loadMore();
     }
-  }, []);
+  }
 
   async function loadFavs() {
     const ids = await getFavIds();
@@ -144,6 +242,8 @@ function MotivationScreen() {
 
   async function handleDownload(item) {
     try {
+      const FileSystem = require('expo-file-system');
+      const MediaLibrary = require('expo-media-library');
       setLoadingImg(prev => ({ ...prev, [item.id]: true }));
 
       const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -184,78 +284,6 @@ function MotivationScreen() {
   }
 
   const isFavTab = activeTab === '_fav';
-
-  function MotivationPage({ item, isFav }) {
-    const isFavd = favIds.has(item.id);
-    const imgLg = getWallpaperUrl(item);
-    const isLoading = loadingImg[item.id];
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const [imgLoaded, setImgLoaded] = useState(false);
-    const sub = item.sub || 'renungan';
-    const quote = item.quote || '';
-    const source = item.source || '';
-    const title = item.title || '';
-
-    useEffect(() => {
-      Image.prefetch(imgLg).catch(() => {});
-    }, [item.id]);
-
-    return (
-      <View style={s.page}>
-        <View style={s.placeholderBg} />
-        <Image
-          source={{ uri: imgLg }}
-          style={[s.bgImg, { opacity: fadeAnim }]}
-          resizeMode="cover"
-          onLoad={() => {
-            setImgLoaded(true);
-            Animated.timing(fadeAnim, {
-              toValue: 1, duration: 400, useNativeDriver: true,
-            }).start();
-          }}
-        />
-        <View style={[s.overlay, !imgLoaded && s.overlaySolid]}>
-          <SafeAreaView style={s.pageInner} edges={['top']}>
-            <View style={s.topRow}>
-              <View style={s.pillRow}>
-                <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
-                {isFav && <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>}
-              </View>
-              <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
-                {isFavd
-                  ? <BookmarkFillIcon color="#FFD700" size={22} />
-                  : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
-                }
-              </TouchableOpacity>
-            </View>
-            <View style={s.quoteWrap}>
-              <Text style={s.quoteIcon}>&#x201C;</Text>
-              <Text style={s.quoteText}>{quote}</Text>
-              <Text style={s.sourceText}>{source}</Text>
-            </View>
-            <View style={s.divider} />
-            <View style={s.bottomRow}>
-              <View style={s.titleBlock}>
-                <Text style={s.titleText}>{title}</Text>
-              </View>
-              <TouchableOpacity
-                style={s.dlBtn}
-                onPress={() => handleDownload(item)}
-                disabled={isLoading}
-                activeOpacity={0.7}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <DownloadIcon color="#fff" size={20} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={s.root}>
@@ -303,7 +331,7 @@ function MotivationScreen() {
             ref={listRef}
             data={favItems}
             keyExtractor={(item, idx) => `${item.id}-fav-${idx}`}
-            renderItem={({ item }) => <MotivationPage item={item} isFav />}
+            renderItem={({ item }) => <MotivationPage item={item} isFav favIds={favIds} handleFav={handleFav} loadingImg={loadingImg} handleDownload={handleDownload} />}
             showsVerticalScrollIndicator={false}
             snapToInterval={SCREEN_H}
             decelerationRate="fast"
@@ -326,7 +354,7 @@ function MotivationScreen() {
             ref={listRef}
             data={items}
             keyExtractor={(item, idx) => `${item.id}-${idx}`}
-            renderItem={({ item }) => <MotivationPage item={item} isFav={false} />}
+            renderItem={({ item }) => <MotivationPage item={item} isFav={false} favIds={favIds} handleFav={handleFav} loadingImg={loadingImg} handleDownload={handleDownload} />}
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={100}

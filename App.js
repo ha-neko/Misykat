@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import React, { Component, useEffect, useRef, useState } from 'react';
+import { AppState, View, Text, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -234,14 +234,58 @@ function AppInner() {
   );
 }
 
+// ---- App-level error boundary (last resort) ----
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error) {
+    try {
+      const entry = { id: Date.now().toString(36), message: error?.message || String(error), time: Date.now() };
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      AsyncStorage.getItem('misykat_error_log').then(r => {
+        const list = r ? JSON.parse(r) : [];
+        list.unshift(entry);
+        if (list.length > 50) list.length = 50;
+        AsyncStorage.setItem('misykat_error_log', JSON.stringify(list));
+      }).catch(() => {});
+    } catch {}
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0d0d0d', justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#ff4444', marginBottom: 12 }}>Aplikasi mengalami error</Text>
+          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+            {this.state.error?.message || 'Unknown error'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => this.setState({ error: null })}
+            style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)' }}
+          >
+            <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <LanguageProvider>
-        <ThemeProvider>
-          <AppInner />
-        </ThemeProvider>
-      </LanguageProvider>
-    </SafeAreaProvider>
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <AppInner />
+          </ThemeProvider>
+        </LanguageProvider>
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }
