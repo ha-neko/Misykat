@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch,
-  TextInput, Modal, Platform, Share,
+  TextInput, Modal, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,7 +10,7 @@ import { getUserProfile } from '../utils/recommendation';
 import AppLogo from '../components/AppLogo';
 import { useTheme } from '../theme/ThemeContext';
 import { useLocale } from '../i18n/LanguageContext';
-import { SunIcon, CrescentIcon, GlobeIcon, PencilIcon, WarningIcon } from '../components/Icons';
+import { SunIcon, CrescentIcon, GlobeIcon, PencilIcon } from '../components/Icons';
 
 const USERNAME_KEY = 'app_username';
 
@@ -22,37 +22,8 @@ export default function SettingsScreen() {
   const [username, setUsername] = useState('');
   const [showNameModal, setShowNameModal] = useState(false);
   const [tempName, setTempName] = useState('');
-  const [errorLog, setErrorLog] = useState([]);
 
-  useEffect(() => { loadInfo(); loadErrorLog(); }, []);
-
-  const ERROR_LOG_KEY = 'misykat_error_log';
-
-  async function loadErrorLog() {
-    try {
-      const raw = await AsyncStorage.getItem(ERROR_LOG_KEY);
-      if (raw) setErrorLog(JSON.parse(raw));
-    } catch {}
-  }
-
-  async function clearErrorLog() {
-    try {
-      await AsyncStorage.removeItem(ERROR_LOG_KEY);
-      setErrorLog([]);
-    } catch {}
-  }
-
-  function shareErrors() {
-    if (errorLog.length === 0) {
-      Share.share({ message: 'No errors logged.', title: 'Misykat Error Report' });
-      return;
-    }
-    const report = errorLog.map((e, i) => {
-      const d = new Date(e.time).toLocaleString();
-      return `[${i + 1}] ${d}\n  ${e.context || '—'}\n  ${e.message}`;
-    }).join('\n\n---\n\n');
-    Share.share({ message: report, title: 'Misykat Error Report' });
-  }
+  useEffect(() => { loadInfo(); }, []);
 
   async function loadInfo() {
     try {
@@ -183,77 +154,6 @@ export default function SettingsScreen() {
           <TouchableOpacity style={s.actionBtn} onPress={handleClearCache} activeOpacity={0.7}>
             <Text style={s.actionBtnText}>{t('clearCache')}</Text>
           </TouchableOpacity>
-        </View>
-
-        <Text style={s.sectionHeader}>
-          {t('errorLog')} {errorLog.length > 0 && `(${errorLog.length})`}
-        </Text>
-        <View style={s.card}>
-          {errorLog.length > 0 ? (
-            <>
-              <TouchableOpacity
-                style={s.errorRow}
-                onPress={shareErrors}
-                activeOpacity={0.7}
-              >
-                <View style={s.rowLeft}>
-                  <View style={[s.iconWrap, { backgroundColor: '#3a1a1a' }]}>
-                    <WarningIcon color="#ff6b6b" size={18} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.rowLabel}>{t('reportToDev')}</Text>
-                    <Text style={s.rowHint}>{t('reportHint')}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              <View style={s.divider} />
-
-              {/* latest error preview */}
-              <View style={s.errorPreview}>
-                <Text style={s.errorTime}>
-                  {new Date(errorLog[0].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-                <Text style={s.errorMsg} numberOfLines={2}>
-                  {errorLog[0].message}
-                </Text>
-              </View>
-
-              {errorLog.length > 1 && (
-                <>
-                  <View style={s.divider} />
-                  <TouchableOpacity
-                    style={s.showAllBtn}
-                    onPress={shareErrors}
-                  >
-                    <Text style={s.showAllText}>
-                      Lihat semua {errorLog.length} error
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-
-              <View style={s.divider} />
-
-              <TouchableOpacity
-                style={[s.actionBtn, { backgroundColor: '#2a1010' }]}
-                onPress={async () => {
-                  await clearErrorLog();
-                  Alert.alert(t('success'), t('errorsCleared'));
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[s.actionBtnText, { color: '#ff6b6b' }]}>{t('clearErrors')}</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <View style={{ padding: 24, alignItems: 'center' }}>
-              <WarningIcon color={c.outline} size={32} />
-              <Text style={{ fontSize: 13, color: c.onSurfaceVariant, marginTop: 8 }}>
-                {t('errorLogEmpty')}
-              </Text>
-            </View>
-          )}
         </View>
 
         <Text style={s.sectionHeader}>{t('about')}</Text>
