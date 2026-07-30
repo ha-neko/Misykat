@@ -26,6 +26,7 @@ const WALLPAPERS = {
 
 export default function MotivationScreen() {
   const categories = getCategories();
+  const catRef = useRef(categories[0]);
   const [selectedCat, setSelectedCat] = useState(categories[0]);
   const [items, setItems] = useState([]);
   const [favIds, setFavIds] = useState(new Set());
@@ -40,25 +41,33 @@ export default function MotivationScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const mounted = useRef(true);
 
+  // -- load on mount --
   useEffect(() => {
     mounted.current = true;
     loadFavIds();
-    loadCategory(categories[0], 0).then(() => {
+    const cat = categories[0];
+    catRef.current = cat;
+    fetchAndSet(cat, 0).then(() => {
       if (mounted.current) setLoading(false);
     });
     return () => { mounted.current = false; };
   }, []);
 
+  // -- when category tab changes --
+  const prevCat = useRef(selectedCat);
   useEffect(() => {
-    if (!favTab && categories.includes(selectedCat) && !loading) {
-      setItems([]); setPage(0); setHasMore(true); setLoading(true);
-      setWallpaperLoaded(false); fadeAnim.setValue(0);
-      loadCategory(selectedCat, 0).then(() => {
-        if (mounted.current) setLoading(false);
-      });
-    }
+    if (favTab) return;
+    if (prevCat.current === selectedCat) return;
+    prevCat.current = selectedCat;
+    catRef.current = selectedCat;
+    setItems([]); setPage(0); setHasMore(true); setLoading(true);
+    setWallpaperLoaded(false); fadeAnim.setValue(0);
+    fetchAndSet(selectedCat, 0).then(() => {
+      if (mounted.current) setLoading(false);
+    });
   }, [selectedCat, favTab]);
 
+  // -- fade in when items arrive --
   useEffect(() => {
     if (!loading && items.length > 0) {
       Animated.timing(fadeAnim, {
@@ -67,32 +76,32 @@ export default function MotivationScreen() {
     }
   }, [loading, items]);
 
+  // -- load favorites when fav tab selected --
   useEffect(() => {
     if (favTab) loadFavItems();
   }, [favTab]);
 
   const wallpaper = WALLPAPERS[selectedCat] || WALLPAPERS.umum;
 
-  async function loadCategory(cat, startPage) {
+  async function fetchAndSet(cat, startPage) {
     try {
-      const result = await fetchBatch(cat, startPage, PAGE_SIZE);
+      const result = await fetchBatch(cat, PAGE_SIZE);
       if (!mounted.current) return;
-      if (!result || !result.items) return;
-      if (startPage === 0) {
-        setItems(result.items);
-      } else {
-        setItems(prev => [...prev, ...result.items]);
+      if (!result || result.length === 0) {
+        setHasMore(false);
+        return;
       }
-      setHasMore(result.hasMore !== false);
-    } catch (e) {
+      if (startPage === 0) setItems(result);
+      else setItems(prev => [...prev, ...result]);
+      setHasMore(result.length >= PAGE_SIZE);
+    } catch {
       // silent
     }
   }
 
   async function loadFavIds() {
-    try { const ids = await getFavIds(); setFavIds(ids); } catch {}
+    try { const ids = await getFavIds(); setFavIds(new Set(ids)); } catch {}
   }
-
   async function loadFavItems() {
     try { const f = await getFavorites(); setFavItems(f); } catch {}
   }
@@ -100,14 +109,14 @@ export default function MotivationScreen() {
   async function handleToggleFav(id) {
     await toggleFavorite(id);
     const ids = await getFavIds();
-    setFavIds(ids);
+    setFavIds(new Set(ids));
   }
 
   function onRefresh() {
     setRefreshing(true);
     setItems([]); setPage(0); setHasMore(true); setLoading(true);
     setWallpaperLoaded(false); fadeAnim.setValue(0);
-    loadCategory(selectedCat, 0).then(() => {
+    fetchAndSet(selectedCat, 0).then(() => {
       if (mounted.current) { setRefreshing(false); setLoading(false); }
     });
   }
@@ -116,13 +125,12 @@ export default function MotivationScreen() {
     if (!hasMore || loading || refreshing) return;
     const nextPage = page + 1;
     setPage(nextPage);
-    loadCategory(selectedCat, nextPage);
+    fetchAndSet(selectedCat, nextPage);
   }
 
   function selectCategory(cat) {
     setFavTab(false); setSelectedCat(cat);
   }
-
   function selectFav() {
     setFavTab(true); loadFavItems();
   }
@@ -132,14 +140,13 @@ export default function MotivationScreen() {
     try {
       const fs = require('expo-file-system');
       const media = require('expo-media-library');
-
       const uri = wallpaper;
       const fileUri = fs.cacheDirectory + 'motivasi_wallpaper.jpg';
       await fs.downloadAsync(uri, fileUri);
       const asset = await media.createAssetAsync(fileUri);
       await media.createAlbumAsync('Misykat', asset, false);
       Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
-    } catch (e) {
+    } catch {
       Alert.alert('Gagal', 'Tidak dapat menyimpan wallpaper');
     } finally {
       setDlPending(false);
@@ -183,12 +190,7 @@ export default function MotivationScreen() {
       <View style={s.overlay} />
 
       <SafeAreaView style={s.content}>
-        {/* Download button */}
-        <TouchableOpacity
-          style={s.dlBtn}
-          onPress={handleDownload}
-          disabled={dlPending}
-        >
+        <TouchableOpacity style={s.dlBtn} onPress={handleDownload} disabled={dlPending}>
           <DownloadIcon size={20} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
 
