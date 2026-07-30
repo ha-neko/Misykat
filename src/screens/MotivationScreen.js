@@ -6,6 +6,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
+import {
+  getCategories, getCategoryLabel,
+  getFavIds, toggleFavorite,
+  getFavorites, fetchBatch,
+  isFav, getCacheSize,
+} from '../utils/motivations';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const STATUSBAR = StatusBar.currentHeight || 30;
