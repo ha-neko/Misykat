@@ -18,6 +18,13 @@ const STATUSBAR = StatusBar.currentHeight || 30;
 const NUM_COLS = 1;
 const PAGE_SIZE = 4;
 
+const WALLPAPERS = {
+  pekerjaan: 'https://picsum.photos/seed/pekerjaan/720/1280',
+  keluarga: 'https://picsum.photos/seed/keluarga/720/1280',
+  umum: 'https://picsum.photos/seed/umum/720/1280',
+  ibadah: 'https://picsum.photos/seed/ibadah/720/1280',
+};
+
 export default function MotivationScreen() {
   const categories = getCategories();
   const [selectedCat, setSelectedCat] = useState(categories[0]);
@@ -29,6 +36,8 @@ export default function MotivationScreen() {
   const [loading, setLoading] = useState(true);
   const [favTab, setFavTab] = useState(false);
   const [favItems, setFavItems] = useState([]);
+  const [wallpaperLoaded, setWallpaperLoaded] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const catAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -42,10 +51,26 @@ export default function MotivationScreen() {
       setPage(0);
       setHasMore(true);
       setLoading(true);
+      setWallpaperLoaded(false);
+      fadeAnim.setValue(0);
       const t = setTimeout(() => loadCategory(selectedCat, 0), 50);
       return () => clearTimeout(t);
     }
   }, [selectedCat, favTab]);
+
+  useEffect(() => {
+    if (!loading && items.length > 0) {
+      Animated.timing(fadeAnim, {
+        toValue: 1, duration: 400, useNativeDriver: true,
+      }).start();
+    }
+  }, [loading, items]);
+
+  useEffect(() => {
+    if (favTab) loadFavItems();
+  }, [favTab]);
+
+  const wallpaper = WALLPAPERS[selectedCat] || WALLPAPERS.umum;
 
   async function loadInitial() {
     setLoading(true);
@@ -62,22 +87,16 @@ export default function MotivationScreen() {
       setItems(startPage === 0 ? result.items : prev => [...prev, ...result.items]);
       setHasMore(result.hasMore !== false);
     } catch (e) {
-      // ignore
+      // silent
     }
   }
 
   async function loadFavIds() {
-    try {
-      const ids = await getFavIds();
-      setFavIds(ids);
-    } catch {}
+    try { const ids = await getFavIds(); setFavIds(ids); } catch {}
   }
 
   async function loadFavItems() {
-    try {
-      const f = await getFavorites();
-      setFavItems(f);
-    } catch {}
+    try { const f = await getFavorites(); setFavItems(f); } catch {}
   }
 
   async function handleToggleFav(id) {
@@ -88,14 +107,9 @@ export default function MotivationScreen() {
 
   function onRefresh() {
     setRefreshing(true);
-    setItems([]);
-    setPage(0);
-    setHasMore(true);
-    setLoading(true);
-    loadCategory(selectedCat, 0).then(() => {
-      setRefreshing(false);
-      setLoading(false);
-    });
+    setItems([]); setPage(0); setHasMore(true); setLoading(true);
+    setWallpaperLoaded(false); fadeAnim.setValue(0);
+    loadCategory(selectedCat, 0).then(() => { setRefreshing(false); setLoading(false); });
   }
 
   function onEndReached() {
@@ -143,70 +157,87 @@ export default function MotivationScreen() {
   };
 
   return (
-    <SafeAreaView style={s.root}>
-      <StatusBar barStyle="light-content" translucent={false} backgroundColor="#000" />
-      <View style={s.tabRow}>
-        {categories.map(cat => (
-          <TouchableOpacity
-            key={cat}
-            style={[s.tab, selectedCat === cat && !favTab && s.tabActive]}
-            onPress={() => selectCategory(cat)}
-          >
-            <Text style={[s.tabLabel, selectedCat === cat && !favTab && s.tabLabelActive]}>
-              {getCategoryLabel(cat)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity
-          style={[s.tab, favTab && s.tabActive]}
-          onPress={selectFav}
-        >
-          <Text style={[s.tabLabel, favTab && s.tabLabelActive]}>Favorit</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={s.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {favTab ? (
-        <FlatList
-          data={favItems}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={renderItem}
-          contentContainerStyle={s.list}
-          ListEmptyComponent={
-            <Text style={s.emptyText}>Belum ada favorit</Text>
-          }
-        />
-      ) : loading ? (
-        <View style={s.loadingContainer}>
-          <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
+      {/* Wallpaper */}
+      <Image
+        source={{ uri: wallpaper }}
+        style={s.wallpaper}
+        onLoad={() => setWallpaperLoaded(true)}
+        blurRadius={2}
+      />
+      <View style={s.overlay} />
+
+      <SafeAreaView style={s.content}>
+        <View style={s.tabRow}>
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[s.tab, selectedCat === cat && !favTab && s.tabActive]}
+              onPress={() => selectCategory(cat)}
+            >
+              <Text style={[s.tabLabel, selectedCat === cat && !favTab && s.tabLabelActive]}>
+                {getCategoryLabel(cat)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={[s.tab, favTab && s.tabActive]}
+            onPress={selectFav}
+          >
+            <Text style={[s.tabLabel, favTab && s.tabLabelActive]}>Favorit</Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={renderItem}
-          contentContainerStyle={s.list}
-          onRefresh={onRefresh}
-          refreshing={refreshing}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            hasMore ? (
-              <View style={s.footer}>
-                <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            <Text style={s.emptyText}>Tidak ada item</Text>
-          }
-        />
-      )}
-    </SafeAreaView>
+
+        {favTab ? (
+          <FlatList
+            data={favItems}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={renderItem}
+            contentContainerStyle={s.list}
+            ListEmptyComponent={<Text style={s.emptyText}>Belum ada favorit</Text>}
+          />
+        ) : loading ? (
+          <View style={s.loadingContainer}>
+            <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
+          </View>
+        ) : (
+          <Animated.FlatList
+            data={items}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={renderItem}
+            contentContainerStyle={s.list}
+            onRefresh={onRefresh}
+            refreshing={refreshing}
+            onEndReached={onEndReached}
+            onEndReachedThreshold={0.5}
+            style={{ opacity: fadeAnim }}
+            ListFooterComponent={
+              hasMore ? (
+                <View style={s.footer}>
+                  <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
+                </View>
+              ) : null
+            }
+            ListEmptyComponent={<Text style={s.emptyText}>Tidak ada item</Text>}
+          />
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  wallpaper: {
+    ...StyleSheet.absoluteFillObject, width: '100%', height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  content: { flex: 1 },
   tabRow: {
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12,
     paddingTop: 56, paddingBottom: 28, gap: 8,
@@ -222,7 +253,8 @@ const s = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 40 },
   itemCard: {
     padding: 16, marginBottom: 12, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    backdropFilter: 'blur(10px)',
   },
   itemText: { fontSize: 14, color: '#fff', lineHeight: 22 },
   itemSource: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 8 },
