@@ -15,7 +15,6 @@ import {
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const STATUSBAR = StatusBar.currentHeight || 30;
-const NUM_COLS = 1;
 const PAGE_SIZE = 4;
 
 const WALLPAPERS = {
@@ -37,24 +36,26 @@ export default function MotivationScreen() {
   const [favTab, setFavTab] = useState(false);
   const [favItems, setFavItems] = useState([]);
   const [wallpaperLoaded, setWallpaperLoaded] = useState(false);
+  const [dlPending, setDlPending] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const catAnim = useRef(new Animated.Value(0)).current;
+  const mounted = useRef(true);
 
   useEffect(() => {
-    loadInitial();
+    mounted.current = true;
     loadFavIds();
+    loadCategory(categories[0], 0).then(() => {
+      if (mounted.current) setLoading(false);
+    });
+    return () => { mounted.current = false; };
   }, []);
 
   useEffect(() => {
-    if (!favTab && categories.includes(selectedCat)) {
-      setItems([]);
-      setPage(0);
-      setHasMore(true);
-      setLoading(true);
-      setWallpaperLoaded(false);
-      fadeAnim.setValue(0);
-      const t = setTimeout(() => loadCategory(selectedCat, 0), 50);
-      return () => clearTimeout(t);
+    if (!favTab && categories.includes(selectedCat) && !loading) {
+      setItems([]); setPage(0); setHasMore(true); setLoading(true);
+      setWallpaperLoaded(false); fadeAnim.setValue(0);
+      loadCategory(selectedCat, 0).then(() => {
+        if (mounted.current) setLoading(false);
+      });
     }
   }, [selectedCat, favTab]);
 
@@ -72,19 +73,16 @@ export default function MotivationScreen() {
 
   const wallpaper = WALLPAPERS[selectedCat] || WALLPAPERS.umum;
 
-  async function loadInitial() {
-    setLoading(true);
-    const cat = categories[0];
-    setSelectedCat(cat);
-    await loadCategory(cat, 0);
-    setLoading(false);
-  }
-
   async function loadCategory(cat, startPage) {
     try {
       const result = await fetchBatch(cat, startPage, PAGE_SIZE);
+      if (!mounted.current) return;
       if (!result || !result.items) return;
-      setItems(startPage === 0 ? result.items : prev => [...prev, ...result.items]);
+      if (startPage === 0) {
+        setItems(result.items);
+      } else {
+        setItems(prev => [...prev, ...result.items]);
+      }
       setHasMore(result.hasMore !== false);
     } catch (e) {
       // silent
@@ -109,7 +107,9 @@ export default function MotivationScreen() {
     setRefreshing(true);
     setItems([]); setPage(0); setHasMore(true); setLoading(true);
     setWallpaperLoaded(false); fadeAnim.setValue(0);
-    loadCategory(selectedCat, 0).then(() => { setRefreshing(false); setLoading(false); });
+    loadCategory(selectedCat, 0).then(() => {
+      if (mounted.current) { setRefreshing(false); setLoading(false); }
+    });
   }
 
   function onEndReached() {
@@ -120,13 +120,30 @@ export default function MotivationScreen() {
   }
 
   function selectCategory(cat) {
-    setFavTab(false);
-    setSelectedCat(cat);
+    setFavTab(false); setSelectedCat(cat);
   }
 
   function selectFav() {
-    setFavTab(true);
-    loadFavItems();
+    setFavTab(true); loadFavItems();
+  }
+
+  async function handleDownload() {
+    setDlPending(true);
+    try {
+      const fs = require('expo-file-system');
+      const media = require('expo-media-library');
+
+      const uri = wallpaper;
+      const fileUri = fs.cacheDirectory + 'motivasi_wallpaper.jpg';
+      await fs.downloadAsync(uri, fileUri);
+      const asset = await media.createAssetAsync(fileUri);
+      await media.createAlbumAsync('Misykat', asset, false);
+      Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
+    } catch (e) {
+      Alert.alert('Gagal', 'Tidak dapat menyimpan wallpaper');
+    } finally {
+      setDlPending(false);
+    }
   }
 
   const renderItem = ({ item }) => {
@@ -145,11 +162,8 @@ export default function MotivationScreen() {
             onPress={() => handleToggleFav(key)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {isFavItem ? (
-              <BookmarkFillIcon size={20} color="#fbbf24" />
-            ) : (
-              <BookmarkIcon size={20} color="rgba(255,255,255,0.4)" />
-            )}
+            {isFavItem ? <BookmarkFillIcon size={20} color="#fbbf24" />
+              : <BookmarkIcon size={20} color="rgba(255,255,255,0.4)" />}
           </TouchableOpacity>
         </View>
       </View>
@@ -160,7 +174,6 @@ export default function MotivationScreen() {
     <View style={s.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Wallpaper */}
       <Image
         source={{ uri: wallpaper }}
         style={s.wallpaper}
@@ -170,6 +183,15 @@ export default function MotivationScreen() {
       <View style={s.overlay} />
 
       <SafeAreaView style={s.content}>
+        {/* Download button */}
+        <TouchableOpacity
+          style={s.dlBtn}
+          onPress={handleDownload}
+          disabled={dlPending}
+        >
+          <DownloadIcon size={20} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
+
         <View style={s.tabRow}>
           {categories.map(cat => (
             <TouchableOpacity
@@ -182,10 +204,7 @@ export default function MotivationScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
-            style={[s.tab, favTab && s.tabActive]}
-            onPress={selectFav}
-          >
+          <TouchableOpacity style={[s.tab, favTab && s.tabActive]} onPress={selectFav}>
             <Text style={[s.tabLabel, favTab && s.tabLabelActive]}>Favorit</Text>
           </TouchableOpacity>
         </View>
@@ -230,14 +249,15 @@ export default function MotivationScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  wallpaper: {
-    ...StyleSheet.absoluteFillObject, width: '100%', height: '100%',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
+  wallpaper: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   content: { flex: 1 },
+  dlBtn: {
+    position: 'absolute', top: 12, right: 12, zIndex: 10,
+    width: 46, height: 46, borderRadius: 23,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   tabRow: {
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12,
     paddingTop: 56, paddingBottom: 28, gap: 8,
@@ -254,7 +274,6 @@ const s = StyleSheet.create({
   itemCard: {
     padding: 16, marginBottom: 12, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    backdropFilter: 'blur(10px)',
   },
   itemText: { fontSize: 14, color: '#fff', lineHeight: 22 },
   itemSource: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 8 },
