@@ -15,30 +15,35 @@ import {
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 4;
 
-// small image for the background (fast load), larger for download
-const BG_W = Math.round(SCREEN_W / 3);
-const BG_H = Math.round(SCREEN_H / 3);
+// full-resolution wallpaper for display + download
+const FULL_W = Math.round(SCREEN_W);
+const FULL_H = Math.round(SCREEN_H);
+const DL_W = 1080;
+const DL_H = 1920;
 
-function getWallpaperUrl(item) {
+function getWallpaperUrl(item, size) {
   const base = item.id || 'umum';
-  return `https://picsum.photos/seed/${base}/${BG_W}/${BG_H}`;
+  if (size === 'dl') return `https://picsum.photos/seed/${base}/${DL_W}/${DL_H}`;
+  return `https://picsum.photos/seed/${base}/${FULL_W}/${FULL_H}`;
 }
 
 // adaptive quote font size based on text length
 function getQuoteStyle(text) {
   const len = (text || '').length;
-  let fontSize = 24;
-  if (len >= 60) fontSize = 22;
-  if (len >= 120) fontSize = 20;
-  if (len >= 200) fontSize = 18;
-  if (len >= 300) fontSize = 16;
-  return { fontSize, lineHeight: Math.round(fontSize * 1.55) };
+  let fontSize = 20;
+  if (len >= 60) fontSize = 18;
+  if (len >= 120) fontSize = 17;
+  if (len >= 200) fontSize = 16;
+  if (len >= 300) fontSize = 15;
+  if (len >= 450) fontSize = 14;
+  return { fontSize, lineHeight: Math.round(fontSize * 1.5) };
 }
 
 export default function MotivationScreen() {
   const cats = getCategories();
   const listRef = useRef(null);
   const pinRefs = useRef({});
+  const imgReadyRef = useRef({});
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
@@ -46,7 +51,6 @@ export default function MotivationScreen() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [dlPending, setDlPending] = useState({});
-  const [imgReady, setImgReady] = useState({});
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -114,6 +118,17 @@ export default function MotivationScreen() {
     await loadFavs();
   }
 
+  function waitForImage(id, timeout = 10000) {
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      (function check() {
+        if (imgReadyRef.current[id]) return resolve(true);
+        if (Date.now() - t0 > timeout) return resolve(false);
+        setTimeout(check, 150);
+      })();
+    });
+  }
+
   async function handleDownload(item) {
     const id = item.id;
     setDlPending(prev => ({ ...prev, [id]: true }));
@@ -122,21 +137,36 @@ export default function MotivationScreen() {
 
       const perm = await media.requestPermissionsAsync();
       if (perm.status !== 'granted') {
-        Alert.alert('Izin dibutuhkan', 'Berikan izin akses media untuk menyimpan wallpaper');
+        Alert.alert('Izin dibutuhkan', 'Berikan izin akses media untuk menyimpan gambar');
         return;
       }
 
+      await waitForImage(id);
+
+      // primary: capture the Pinterest-style quote pin
       const node = pinRefs.current[id];
-      if (!node) throw new Error('no pin node');
+      if (node) {
+        try {
+          const uri = await captureRef(node, {
+            format: 'jpg',
+            quality: 0.95,
+            result: 'tmpfile',
+          });
+          const asset = await media.createAssetAsync(uri);
+          await media.createAlbumAsync('Misykat', asset, false);
+          Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
+          return;
+        } catch {
+          // fall through to wallpaper fallback
+        }
+      }
 
-      // capture the rendered pin (bg + overlay + text) as an image
-      const uri = await captureRef(node, {
-        format: 'jpg',
-        quality: 0.95,
-        result: 'tmpfile',
-      });
-
-      const asset = await media.createAssetAsync(uri);
+      // fallback: full-resolution wallpaper
+      const fs = require('expo-file-system');
+      const url = getWallpaperUrl(item, 'dl');
+      const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
+      await fs.downloadAsync(url, fileUri);
+      const asset = await media.createAssetAsync(fileUri);
       await media.createAlbumAsync('Misykat', asset, false);
       Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
     } catch {
@@ -152,7 +182,6 @@ export default function MotivationScreen() {
     const isFavd = favIds.has(item.id);
     const imgUrl = getWallpaperUrl(item);
     const loadingDl = dlPending[item.id];
-    const ready = !!imgReady[item.id];
     const text = item.quote || item.ayat || item.text || '';
     const source = item.source || item.surah || '';
     const title = item.title || '';
@@ -161,7 +190,7 @@ export default function MotivationScreen() {
 
     return (
       <View style={s.page}>
-        {/* Captured pin: wallpaper + overlay + text (no button) */}
+        {/* Captured pin: wallpaper + quote — Pinterest post style */}
         <View
           ref={node => { pinRefs.current[item.id] = node; }}
           collapsable={false}
@@ -172,51 +201,45 @@ export default function MotivationScreen() {
             style={s.bgImg}
             resizeMode="cover"
             fadeDuration={0}
-            onLoad={() => setImgReady(prev => ({ ...prev, [item.id]: true }))}
+            onLoad={() => { imgReadyRef.current[item.id] = true; }}
           />
           <View style={s.overlay}>
-            <SafeAreaView style={s.pageInner} edges={['top']}>
-              <View style={s.topRow}>
-                <View style={s.pillRow}>
-                  {sub ? (
-                    <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
-                  ) : null}
-                  {isFromFav ? (
-                    <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
-                  ) : null}
-                </View>
-                <TouchableOpacity onPress={() => handleFav(item)} hitSlop={12}>
-                  {isFavd
-                    ? <BookmarkFillIcon color="#FFD700" size={22} />
-                    : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
-                  }
-                </TouchableOpacity>
-              </View>
-
-              <View style={s.quoteWrap}>
-                <Text style={s.quoteIcon}>"</Text>
-                <Text style={[s.quoteText, qStyle]}>{text}</Text>
-                {source ? <Text style={s.sourceText}>{source}</Text> : null}
-              </View>
-
-              <View style={s.bottomRow}>
+            <View style={s.pinContent}>
+              {sub ? (
+                <View style={s.subPill}><Text style={s.subPillText}>{sub}</Text></View>
+              ) : null}
+              <Text style={s.quoteIcon}>"</Text>
+              <Text style={[s.quoteText, qStyle]}>{text}</Text>
+              {source ? <Text style={s.sourceText}>{source}</Text> : null}
+              {title && title !== source ? (
                 <Text style={s.titleText} numberOfLines={1}>{title}</Text>
-              </View>
-            </SafeAreaView>
+              ) : null}
+            </View>
           </View>
         </View>
 
-        {/* Floating download button — excluded from capture */}
+        {/* Interactive UI — outside the captured pin */}
         <TouchableOpacity
-          style={[s.dlBtn, !ready && s.dlBtnDisabled]}
+          style={s.favBtn}
+          onPress={() => handleFav(item)}
+          hitSlop={12}
+        >
+          {isFavd
+            ? <BookmarkFillIcon color="#FFD700" size={22} />
+            : <BookmarkIcon color="rgba(255,255,255,0.8)" size={22} />
+          }
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={s.dlBtn}
           onPress={() => handleDownload(item)}
-          disabled={loadingDl || !ready}
+          disabled={!!loadingDl}
           activeOpacity={0.7}
         >
           {loadingDl ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <DownloadIcon size={18} color="rgba(255,255,255,0.8)" />
+            <DownloadIcon size={18} color="rgba(255,255,255,0.9)" />
           )}
         </TouchableOpacity>
       </View>
@@ -315,51 +338,53 @@ const s = StyleSheet.create({
   bgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  pageInner: {
-    flex: 1, paddingHorizontal: 28, paddingBottom: 40,
+  pinContent: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 40, paddingBottom: 48,
   },
-  topRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: Platform.OS === 'android' ? 50 : 24,
+  subPill: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 20,
   },
-  pillRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pill: {
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  subPillText: {
+    fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
-  pillText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
-  catLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
-  quoteWrap: { flex: 1, justifyContent: 'center', paddingBottom: 40 },
   quoteIcon: {
-    fontSize: 64, color: 'rgba(255,255,255,0.12)', fontWeight: '700',
-    marginBottom: -16, lineHeight: 72,
+    fontSize: 48, color: 'rgba(255,255,255,0.25)', fontWeight: '700',
+    marginBottom: -14, lineHeight: 56,
   },
   quoteText: {
     color: '#fff', fontWeight: '400',
-    letterSpacing: 0.3, fontStyle: 'italic',
+    letterSpacing: 0.2, fontStyle: 'italic',
+    textAlign: 'center',
   },
   sourceText: {
-    fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 12, fontWeight: '500',
-  },
-  bottomRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingBottom: 8,
+    fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 20,
+    fontWeight: '500', textAlign: 'center',
   },
   titleText: {
-    fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '600',
-    flex: 1, marginRight: 12,
+    fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 8,
+    fontWeight: '400', textAlign: 'center',
   },
-  dlBtn: {
-    position: 'absolute', right: 24, bottom: 64, zIndex: 20,
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  favBtn: {
+    position: 'absolute', top: 76, right: 20, zIndex: 20,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center', alignItems: 'center',
   },
-  dlBtnDisabled: { opacity: 0.5 },
+  dlBtn: {
+    position: 'absolute', right: 24, bottom: 56, zIndex: 20,
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   tabOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 30) + 4 : 52,
