@@ -32,10 +32,10 @@ function getQuoteStyle(text) {
   const len = (text || '').length;
   let fontSize = 20;
   if (len >= 60) fontSize = 18;
-  if (len >= 120) fontSize = 17;
-  if (len >= 200) fontSize = 16;
-  if (len >= 300) fontSize = 15;
-  if (len >= 450) fontSize = 14;
+  if (len >= 120) fontSize = 16;
+  if (len >= 200) fontSize = 15;
+  if (len >= 300) fontSize = 14;
+  if (len >= 450) fontSize = 13;
   return { fontSize, lineHeight: Math.round(fontSize * 1.5) };
 }
 
@@ -152,8 +152,10 @@ export default function MotivationScreen() {
             quality: 0.95,
             result: 'tmpfile',
           });
-          const asset = await media.createAssetAsync(uri);
-          await media.createAlbumAsync('Misykat', asset, false);
+          // saveToLibraryAsync writes to the PUBLIC MediaStore —
+          // guaranteed visible in gallery apps (unlike createAlbumAsync
+          // which can land in app-scoped storage on Android 10+)
+          await media.saveToLibraryAsync(uri);
           Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
           return;
         } catch {
@@ -166,8 +168,7 @@ export default function MotivationScreen() {
       const url = getWallpaperUrl(item, 'dl');
       const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
       await fs.downloadAsync(url, fileUri);
-      const asset = await media.createAssetAsync(fileUri);
-      await media.createAlbumAsync('Misykat', asset, false);
+      await media.saveToLibraryAsync(fileUri);
       Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
     } catch {
       Alert.alert('Gagal', 'Tidak dapat menyimpan gambar');
