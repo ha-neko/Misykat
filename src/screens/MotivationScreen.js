@@ -1,286 +1,333 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, StatusBar,
-  Dimensions, Image, ActivityIndicator, Alert, Animated,
+  Dimensions, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import {
   getCategories, getCategoryLabel,
   getFavIds, toggleFavorite,
   getFavorites, fetchBatch,
-  isFav, getCacheSize,
 } from '../utils/motivations';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
-const STATUSBAR = StatusBar.currentHeight || 30;
 const PAGE_SIZE = 4;
 
-const WALLPAPERS = {
-  pekerjaan: 'https://picsum.photos/seed/pekerjaan/720/1280',
-  keluarga: 'https://picsum.photos/seed/keluarga/720/1280',
-  umum: 'https://picsum.photos/seed/umum/720/1280',
-  ibadah: 'https://picsum.photos/seed/ibadah/720/1280',
-};
+function getWallpaperUrl(item) {
+  const base = item.id || 'umum';
+  return `https://picsum.photos/seed/${base}/${Math.round(SCREEN_W)}/${Math.round(SCREEN_H)}`;
+}
 
 export default function MotivationScreen() {
-  const categories = getCategories();
-  const catRef = useRef(categories[0]);
-  const [selectedCat, setSelectedCat] = useState(categories[0]);
+  const cats = getCategories();
+  const listRef = useRef(null);
   const [items, setItems] = useState([]);
-  const [favIds, setFavIds] = useState(new Set());
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [favTab, setFavTab] = useState(false);
+  const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
-  const [wallpaperLoaded, setWallpaperLoaded] = useState(false);
-  const [dlPending, setDlPending] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [activeTab, setActiveTab] = useState(cats[0]);
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [dlPending, setDlPending] = useState({});
   const mounted = useRef(true);
 
-  // -- load on mount --
   useEffect(() => {
     mounted.current = true;
-    loadFavIds();
-    const cat = categories[0];
-    catRef.current = cat;
-    fetchAndSet(cat, 0).then(() => {
-      if (mounted.current) setLoading(false);
-    });
+    loadFavs();
+    loadCategory(cats[0]);
     return () => { mounted.current = false; };
   }, []);
 
-  // -- when category tab changes --
-  const prevCat = useRef(selectedCat);
   useEffect(() => {
-    if (favTab) return;
-    if (prevCat.current === selectedCat) return;
-    prevCat.current = selectedCat;
-    catRef.current = selectedCat;
-    setItems([]); setPage(0); setHasMore(true); setLoading(true);
-    setWallpaperLoaded(false); fadeAnim.setValue(0);
-    fetchAndSet(selectedCat, 0).then(() => {
-      if (mounted.current) setLoading(false);
-    });
-  }, [selectedCat, favTab]);
-
-  // -- fade in when items arrive --
-  useEffect(() => {
-    if (!loading && items.length > 0) {
-      Animated.timing(fadeAnim, {
-        toValue: 1, duration: 400, useNativeDriver: true,
-      }).start();
+    if (activeTab !== '_fav') {
+      setLoading(true);
+      setHasMore(true);
+      loadCategory(activeTab);
     }
-  }, [loading, items]);
+  }, [activeTab]);
 
-  // -- load favorites when fav tab selected --
-  useEffect(() => {
-    if (favTab) loadFavItems();
-  }, [favTab]);
+  async function loadFavs() {
+    const ids = await getFavIds();
+    setFavIdsState(new Set(ids));
+    setFavItems(await getFavorites());
+  }
 
-  const wallpaper = WALLPAPERS[selectedCat] || WALLPAPERS.umum;
-
-  async function fetchAndSet(cat, startPage) {
+  async function loadCategory(cat) {
     try {
       const result = await fetchBatch(cat, PAGE_SIZE);
       if (!mounted.current) return;
       if (!result || result.length === 0) {
+        setItems([]);
         setHasMore(false);
-        return;
+      } else {
+        setItems(result);
+        setHasMore(result.length >= PAGE_SIZE);
       }
-      if (startPage === 0) setItems(result);
-      else setItems(prev => [...prev, ...result]);
-      setHasMore(result.length >= PAGE_SIZE);
     } catch {
-      // silent
+      setItems([]);
+    } finally {
+      if (mounted.current) setLoading(false);
     }
   }
 
-  async function loadFavIds() {
-    try { const ids = await getFavIds(); setFavIds(new Set(ids)); } catch {}
-  }
-  async function loadFavItems() {
-    try { const f = await getFavorites(); setFavItems(f); } catch {}
-  }
-
-  async function handleToggleFav(id) {
-    await toggleFavorite(id);
-    const ids = await getFavIds();
-    setFavIds(new Set(ids));
-  }
-
-  function onRefresh() {
-    setRefreshing(true);
-    setItems([]); setPage(0); setHasMore(true); setLoading(true);
-    setWallpaperLoaded(false); fadeAnim.setValue(0);
-    fetchAndSet(selectedCat, 0).then(() => {
-      if (mounted.current) { setRefreshing(false); setLoading(false); }
+  function loadMore() {
+    if (!hasMore || loading) return;
+    // Re-fetch with same category — new random items
+    fetchBatch(activeTab, PAGE_SIZE).then(result => {
+      if (!mounted.current) return;
+      if (result && result.length > 0) {
+        setItems(prev => [...prev, ...result]);
+        setHasMore(result.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
     });
   }
 
-  function onEndReached() {
-    if (!hasMore || loading || refreshing) return;
-    const nextPage = page + 1;
-    setPage(nextPage);
-    fetchAndSet(selectedCat, nextPage);
+  async function handleFav(id) {
+    await toggleFavorite(id);
+    const ids = await getFavIds();
+    setFavIdsState(new Set(ids));
   }
 
-  function selectCategory(cat) {
-    setFavTab(false); setSelectedCat(cat);
-  }
-  function selectFav() {
-    setFavTab(true); loadFavItems();
-  }
-
-  async function handleDownload() {
-    setDlPending(true);
+  async function handleDownload(item) {
+    const id = item.id;
+    setDlPending(prev => ({ ...prev, [id]: true }));
     try {
       const fs = require('expo-file-system');
       const media = require('expo-media-library');
-      const uri = wallpaper;
-      const fileUri = fs.cacheDirectory + 'motivasi_wallpaper.jpg';
-      await fs.downloadAsync(uri, fileUri);
+      const url = getWallpaperUrl(item);
+      const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
+      await fs.downloadAsync(url, fileUri);
       const asset = await media.createAssetAsync(fileUri);
       await media.createAlbumAsync('Misykat', asset, false);
       Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
     } catch {
-      Alert.alert('Gagal', 'Tidak dapat menyimpan wallpaper');
+      Alert.alert('Gagal', 'Tidak dapat menyimpan gambar');
     } finally {
-      setDlPending(false);
+      if (mounted.current) setDlPending(prev => ({ ...prev, [id]: false }));
     }
   }
 
-  const renderItem = ({ item }) => {
-    const key = item?.id || Math.random().toString();
-    const text = item?.text || item?.ayat || item?.quote || '';
-    const source = item?.source || item?.surah || '';
-    const isFavItem = favIds.has(key);
+  const isFavTab = activeTab === '_fav';
+
+  function renderPage(item, isFromFav) {
+    const isFavd = favIds.has(item.id);
+    const imgUrl = getWallpaperUrl(item);
+    const loadingDl = dlPending[item.id];
+    const text = item.quote || item.ayat || item.text || '';
+    const source = item.source || item.surah || '';
+    const title = item.title || '';
+    const sub = item.sub || '';
 
     return (
-      <View style={s.itemCard}>
-        <Text style={s.itemText} numberOfLines={6}>{text}</Text>
-        {source ? <Text style={s.itemSource}>{source}</Text> : null}
-        <View style={s.itemActions}>
-          <TouchableOpacity
-            style={s.actionBtn}
-            onPress={() => handleToggleFav(key)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            {isFavItem ? <BookmarkFillIcon size={20} color="#fbbf24" />
-              : <BookmarkIcon size={20} color="rgba(255,255,255,0.4)" />}
-          </TouchableOpacity>
+      <View style={s.page}>
+        <Image source={{ uri: imgUrl }} style={s.bgImg} resizeMode="cover" />
+        <View style={s.overlay}>
+          <SafeAreaView style={s.pageInner} edges={['top']}>
+            {/* Top row: pill + bookmark */}
+            <View style={s.topRow}>
+              <View style={s.pillRow}>
+                {sub ? (
+                  <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
+                ) : null}
+                {isFromFav ? (
+                  <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
+                ) : null}
+              </View>
+              <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+                {isFavd
+                  ? <BookmarkFillIcon color="#FFD700" size={22} />
+                  : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* Quote */}
+            <View style={s.quoteWrap}>
+              <Text style={s.quoteIcon}>"</Text>
+              <Text style={s.quoteText}>{text}</Text>
+              {source ? <Text style={s.sourceText}>{source}</Text> : null}
+            </View>
+
+            {/* Bottom row: title + download */}
+            <View style={s.bottomRow}>
+              <Text style={s.titleText} numberOfLines={1}>{title}</Text>
+              <TouchableOpacity
+                style={s.dlBtn}
+                onPress={() => handleDownload(item)}
+                disabled={loadingDl}
+                activeOpacity={0.7}
+              >
+                {loadingDl ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <DownloadIcon size={18} color="rgba(255,255,255,0.7)" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </View>
     );
-  };
+  }
 
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <Image
-        source={{ uri: wallpaper }}
-        style={s.wallpaper}
-        onLoad={() => setWallpaperLoaded(true)}
-        blurRadius={2}
-      />
-      <View style={s.overlay} />
+      {/* Floating tab bar */}
+      <View style={s.tabOverlay}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.tabScroll}
+          data={[...cats, '_fav']}
+          keyExtractor={i => i}
+          renderItem={({ item }) => {
+            const active = activeTab === item;
+            return (
+              <TouchableOpacity
+                style={[s.tab, active && s.tabActive]}
+                onPress={() => {
+                  setActiveTab(item);
+                  if (listRef.current) listRef.current.scrollToOffset({ offset: 0, animated: false });
+                }}
+              >
+                {item === '_fav' && <BookmarkFillIcon color={active ? '#1a1a2e' : 'rgba(255,255,255,0.7)'} size={12} />}
+                <Text style={[s.tabText, active && s.tabTextActive]}>
+                  {item === '_fav' ? 'Favorit' : getCategoryLabel(item)}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
 
-      <SafeAreaView style={s.content}>
-        <TouchableOpacity style={s.dlBtn} onPress={handleDownload} disabled={dlPending}>
-          <DownloadIcon size={20} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
-
-        <View style={s.tabRow}>
-          {categories.map(cat => (
-            <TouchableOpacity
-              key={cat}
-              style={[s.tab, selectedCat === cat && !favTab && s.tabActive]}
-              onPress={() => selectCategory(cat)}
-            >
-              <Text style={[s.tabLabel, selectedCat === cat && !favTab && s.tabLabelActive]}>
-                {getCategoryLabel(cat)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity style={[s.tab, favTab && s.tabActive]} onPress={selectFav}>
-            <Text style={[s.tabLabel, favTab && s.tabLabelActive]}>Favorit</Text>
-          </TouchableOpacity>
+      {/* Content */}
+      {loading && activeTab !== '_fav' ? (
+        <View style={[s.page, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
         </View>
-
-        {favTab ? (
-          <FlatList
-            data={favItems}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={renderItem}
-            contentContainerStyle={s.list}
-            ListEmptyComponent={<Text style={s.emptyText}>Belum ada favorit</Text>}
-          />
-        ) : loading ? (
-          <View style={s.loadingContainer}>
-            <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
+      ) : isFavTab ? (
+        favItems.length === 0 ? (
+          <View style={[s.page, { backgroundColor: '#0d0d0d' }]}>
+            <View style={s.overlay}>
+              <View style={s.emptyContent}>
+                <BookmarkIcon color="rgba(255,255,255,0.2)" size={50} />
+                <Text style={s.emptyTitle}>Belum ada favorit</Text>
+                <Text style={s.emptyHint}>Tambahkan motivasi ke favorit dengan menekan ikon bookmark</Text>
+              </View>
+            </View>
           </View>
         ) : (
-          <Animated.FlatList
-            data={items}
-            keyExtractor={(_, i) => String(i)}
-            renderItem={renderItem}
-            contentContainerStyle={s.list}
-            onRefresh={onRefresh}
-            refreshing={refreshing}
-            onEndReached={onEndReached}
-            onEndReachedThreshold={0.5}
-            style={{ opacity: fadeAnim }}
-            ListFooterComponent={
-              hasMore ? (
-                <View style={s.footer}>
-                  <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={<Text style={s.emptyText}>Tidak ada item</Text>}
+          <FlatList
+            ref={listRef}
+            data={favItems}
+            keyExtractor={(item, idx) => `${item.id}-fav-${idx}`}
+            renderItem={({ item }) => renderPage(item, true)}
+            pagingEnabled
+            showsVerticalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToAlignment="start"
           />
-        )}
-      </SafeAreaView>
+        )
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={items}
+          keyExtractor={(item, idx) => `${item.id}-${idx}`}
+          renderItem={({ item }) => renderPage(item, false)}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={2}
+          decelerationRate="fast"
+          snapToAlignment="start"
+          ListFooterComponent={
+            hasMore && items.length > 0 ? (
+              <View style={s.footer}>
+                <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
+              </View>
+            ) : null
+          }
+        />
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  wallpaper: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
-  content: { flex: 1 },
+  page: { height: SCREEN_H, width: SCREEN_W },
+  bgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'space-between',
+  },
+  pageInner: {
+    flex: 1, paddingHorizontal: 28, paddingBottom: 40,
+  },
+  topRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingTop: Platform.OS === 'android' ? 50 : 24,
+  },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pill: {
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  pillText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  catLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  quoteWrap: { flex: 1, justifyContent: 'center', paddingBottom: 40 },
+  quoteIcon: {
+    fontSize: 64, color: 'rgba(255,255,255,0.12)', fontWeight: '700',
+    marginBottom: -16, lineHeight: 72,
+  },
+  quoteText: {
+    fontSize: 21, color: '#fff', fontWeight: '400', lineHeight: 32,
+    letterSpacing: 0.3, fontStyle: 'italic',
+  },
+  sourceText: {
+    fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 12, fontWeight: '500',
+  },
+  bottomRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingBottom: 24,
+  },
+  titleText: {
+    fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '600',
+    flex: 1, marginRight: 12,
+  },
   dlBtn: {
-    position: 'absolute', top: 12, right: 12, zIndex: 10,
-    width: 46, height: 46, borderRadius: 23,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center', alignItems: 'center',
   },
-  tabRow: {
-    flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12,
-    paddingTop: 56, paddingBottom: 28, gap: 8,
+  tabOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 30) + 4 : 52,
   },
+  tabScroll: { paddingHorizontal: 16, gap: 8, paddingBottom: 4, alignItems: 'center' },
   tab: {
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
-  tabActive: { borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.1)' },
-  tabLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  tabLabelActive: { color: '#fbbf24' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
-  itemCard: {
-    padding: 16, marginBottom: 12, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+  tabActive: { backgroundColor: 'rgba(255,255,255,0.92)', borderColor: '#fff' },
+  tabText: {
+    fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3,
   },
-  itemText: { fontSize: 14, color: '#fff', lineHeight: 22 },
-  itemSource: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 8 },
-  itemActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
-  actionBtn: { padding: 4 },
-  emptyText: { color: 'rgba(255,255,255,0.2)', textAlign: 'center', marginTop: 80, fontSize: 14 },
-  footer: { paddingVertical: 20, alignItems: 'center' },
+  tabTextActive: { color: '#1a1a2e' },
+  emptyContent: {
+    flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10,
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.4)' },
+  emptyHint: {
+    fontSize: 14, color: 'rgba(255,255,255,0.25)', textAlign: 'center',
+    lineHeight: 20, paddingHorizontal: 48,
+  },
+  footer: { height: SCREEN_H, justifyContent: 'center', alignItems: 'center' },
 });
