@@ -143,35 +143,23 @@ export default function MotivationScreen() {
 
       await waitForImage(id);
 
-      const fs = require('expo-file-system');
-
-      // primary: capture the Pinterest-style quote pin
+      // capture the Pinterest-style quote pin — the ONLY download path
       const node = pinRefs.current[id];
-      if (node) {
-        try {
-          const uri = await captureRef(node, {
-            format: 'jpg',
-            quality: 0.95,
-            result: 'tmpfile',
-          });
-          // sanity check: make sure the capture produced a real file
-          const info = await fs.getInfoAsync(uri);
-          if (info && info.exists && info.size > 0) {
-            await media.saveToLibraryAsync(uri);
-            Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
-            return;
-          }
-        } catch {
-          // fall through to wallpaper fallback
-        }
-      }
+      if (!node) throw new Error('no pin node');
 
-      // fallback: full-resolution wallpaper
-      const url = getWallpaperUrl(item, 'dl');
-      const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
-      await fs.downloadAsync(url, fileUri);
-      await media.saveToLibraryAsync(fileUri);
-      Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
+      const uri = await captureRef(node, {
+        format: 'jpg',
+        quality: 0.95,
+        result: 'tmpfile',
+      });
+
+      // sanity check: make sure the capture produced a real file
+      const fs = require('expo-file-system');
+      const info = await fs.getInfoAsync(uri);
+      if (!info || !info.exists || info.size <= 0) throw new Error('empty capture');
+
+      await media.saveToLibraryAsync(uri);
+      Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
     } catch {
       Alert.alert('Gagal', 'Tidak dapat menyimpan gambar');
     } finally {
