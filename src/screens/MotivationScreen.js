@@ -4,6 +4,7 @@ import {
   Dimensions, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { captureRef } from 'react-native-view-shot';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import {
   getCategories, getCategoryLabel,
@@ -17,12 +18,9 @@ const PAGE_SIZE = 4;
 // small image for the background (fast load), larger for download
 const BG_W = Math.round(SCREEN_W / 3);
 const BG_H = Math.round(SCREEN_H / 3);
-const DL_W = 1080;
-const DL_H = 1920;
 
-function getWallpaperUrl(item, size) {
+function getWallpaperUrl(item) {
   const base = item.id || 'umum';
-  if (size === 'dl') return `https://picsum.photos/seed/${base}/${DL_W}/${DL_H}`;
   return `https://picsum.photos/seed/${base}/${BG_W}/${BG_H}`;
 }
 
@@ -40,6 +38,7 @@ function getQuoteStyle(text) {
 export default function MotivationScreen() {
   const cats = getCategories();
   const listRef = useRef(null);
+  const pinRefs = useRef({});
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
@@ -47,6 +46,7 @@ export default function MotivationScreen() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [dlPending, setDlPending] = useState({});
+  const [imgReady, setImgReady] = useState({});
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -97,7 +97,6 @@ export default function MotivationScreen() {
 
   function loadMore() {
     if (!hasMore || loading) return;
-    // Re-fetch with same category — new random items
     fetchBatch(activeTab, PAGE_SIZE).then(result => {
       if (!mounted.current) return;
       if (result && result.length > 0) {
@@ -119,7 +118,6 @@ export default function MotivationScreen() {
     const id = item.id;
     setDlPending(prev => ({ ...prev, [id]: true }));
     try {
-      const fs = require('expo-file-system');
       const media = require('expo-media-library');
 
       const perm = await media.requestPermissionsAsync();
@@ -128,10 +126,17 @@ export default function MotivationScreen() {
         return;
       }
 
-      const url = getWallpaperUrl(item, 'dl');
-      const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
-      await fs.downloadAsync(url, fileUri);
-      const asset = await media.createAssetAsync(fileUri);
+      const node = pinRefs.current[id];
+      if (!node) throw new Error('no pin node');
+
+      // capture the rendered pin (bg + overlay + text) as an image
+      const uri = await captureRef(node, {
+        format: 'jpg',
+        quality: 0.95,
+        result: 'tmpfile',
+      });
+
+      const asset = await media.createAssetAsync(uri);
       await media.createAlbumAsync('Misykat', asset, false);
       Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
     } catch {
@@ -147,6 +152,7 @@ export default function MotivationScreen() {
     const isFavd = favIds.has(item.id);
     const imgUrl = getWallpaperUrl(item);
     const loadingDl = dlPending[item.id];
+    const ready = !!imgReady[item.id];
     const text = item.quote || item.ayat || item.text || '';
     const source = item.source || item.surah || '';
     const title = item.title || '';
@@ -155,57 +161,64 @@ export default function MotivationScreen() {
 
     return (
       <View style={s.page}>
-        <Image
-          source={{ uri: imgUrl }}
-          style={s.bgImg}
-          resizeMode="cover"
-          fadeDuration={0}
-        />
-        <View style={s.overlay}>
-          <SafeAreaView style={s.pageInner} edges={['top']}>
-            {/* Top row: pill + bookmark */}
-            <View style={s.topRow}>
-              <View style={s.pillRow}>
-                {sub ? (
-                  <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
-                ) : null}
-                {isFromFav ? (
-                  <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
-                ) : null}
+        {/* Captured pin: wallpaper + overlay + text (no button) */}
+        <View
+          ref={node => { pinRefs.current[item.id] = node; }}
+          collapsable={false}
+          style={s.pin}
+        >
+          <Image
+            source={{ uri: imgUrl }}
+            style={s.bgImg}
+            resizeMode="cover"
+            fadeDuration={0}
+            onLoad={() => setImgReady(prev => ({ ...prev, [item.id]: true }))}
+          />
+          <View style={s.overlay}>
+            <SafeAreaView style={s.pageInner} edges={['top']}>
+              <View style={s.topRow}>
+                <View style={s.pillRow}>
+                  {sub ? (
+                    <View style={s.pill}><Text style={s.pillText}>{sub}</Text></View>
+                  ) : null}
+                  {isFromFav ? (
+                    <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity onPress={() => handleFav(item)} hitSlop={12}>
+                  {isFavd
+                    ? <BookmarkFillIcon color="#FFD700" size={22} />
+                    : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
+                  }
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => handleFav(item)} hitSlop={12}>
-                {isFavd
-                  ? <BookmarkFillIcon color="#FFD700" size={22} />
-                  : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />
-                }
-              </TouchableOpacity>
-            </View>
 
-            {/* Quote */}
-            <View style={s.quoteWrap}>
-              <Text style={s.quoteIcon}>"</Text>
-              <Text style={[s.quoteText, qStyle]}>{text}</Text>
-              {source ? <Text style={s.sourceText}>{source}</Text> : null}
-            </View>
+              <View style={s.quoteWrap}>
+                <Text style={s.quoteIcon}>"</Text>
+                <Text style={[s.quoteText, qStyle]}>{text}</Text>
+                {source ? <Text style={s.sourceText}>{source}</Text> : null}
+              </View>
 
-            {/* Bottom row: title + download */}
-            <View style={s.bottomRow}>
-              <Text style={s.titleText} numberOfLines={1}>{title}</Text>
-              <TouchableOpacity
-                style={s.dlBtn}
-                onPress={() => handleDownload(item)}
-                disabled={loadingDl}
-                activeOpacity={0.7}
-              >
-                {loadingDl ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <DownloadIcon size={18} color="rgba(255,255,255,0.7)" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
+              <View style={s.bottomRow}>
+                <Text style={s.titleText} numberOfLines={1}>{title}</Text>
+              </View>
+            </SafeAreaView>
+          </View>
         </View>
+
+        {/* Floating download button — excluded from capture */}
+        <TouchableOpacity
+          style={[s.dlBtn, !ready && s.dlBtnDisabled]}
+          onPress={() => handleDownload(item)}
+          disabled={loadingDl || !ready}
+          activeOpacity={0.7}
+        >
+          {loadingDl ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <DownloadIcon size={18} color="rgba(255,255,255,0.8)" />
+          )}
+        </TouchableOpacity>
       </View>
     );
   }
@@ -298,6 +311,7 @@ export default function MotivationScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   page: { height: SCREEN_H, width: SCREEN_W },
+  pin: { flex: 1 },
   bgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -331,18 +345,21 @@ const s = StyleSheet.create({
     fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 12, fontWeight: '500',
   },
   bottomRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: 96,
+    flexDirection: 'row', alignItems: 'center',
+    paddingBottom: 8,
   },
   titleText: {
     fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '600',
     flex: 1, marginRight: 12,
   },
   dlBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    position: 'absolute', right: 24, bottom: 64, zIndex: 20,
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center', alignItems: 'center',
   },
+  dlBtnDisabled: { opacity: 0.5 },
   tabOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 30) + 4 : 52,
