@@ -14,9 +14,27 @@ import {
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 const PAGE_SIZE = 4;
 
-function getWallpaperUrl(item) {
+// small image for the background (fast load), larger for download
+const BG_W = Math.round(SCREEN_W / 3);
+const BG_H = Math.round(SCREEN_H / 3);
+const DL_W = 1080;
+const DL_H = 1920;
+
+function getWallpaperUrl(item, size) {
   const base = item.id || 'umum';
-  return `https://picsum.photos/seed/${base}/${Math.round(SCREEN_W)}/${Math.round(SCREEN_H)}`;
+  if (size === 'dl') return `https://picsum.photos/seed/${base}/${DL_W}/${DL_H}`;
+  return `https://picsum.photos/seed/${base}/${BG_W}/${BG_H}`;
+}
+
+// adaptive quote font size based on text length
+function getQuoteStyle(text) {
+  const len = (text || '').length;
+  let fontSize = 24;
+  if (len >= 60) fontSize = 22;
+  if (len >= 120) fontSize = 20;
+  if (len >= 200) fontSize = 18;
+  if (len >= 300) fontSize = 16;
+  return { fontSize, lineHeight: Math.round(fontSize * 1.55) };
 }
 
 export default function MotivationScreen() {
@@ -61,6 +79,7 @@ export default function MotivationScreen() {
         setHasMore(false);
       } else {
         setItems(result);
+        prefetchWallpapers(result);
         setHasMore(result.length >= PAGE_SIZE);
       }
     } catch {
@@ -70,6 +89,12 @@ export default function MotivationScreen() {
     }
   }
 
+  function prefetchWallpapers(list) {
+    try {
+      list.forEach(i => Image.prefetch(getWallpaperUrl(i)));
+    } catch {}
+  }
+
   function loadMore() {
     if (!hasMore || loading) return;
     // Re-fetch with same category — new random items
@@ -77,6 +102,7 @@ export default function MotivationScreen() {
       if (!mounted.current) return;
       if (result && result.length > 0) {
         setItems(prev => [...prev, ...result]);
+        prefetchWallpapers(result);
         setHasMore(result.length >= PAGE_SIZE);
       } else {
         setHasMore(false);
@@ -96,7 +122,7 @@ export default function MotivationScreen() {
     try {
       const fs = require('expo-file-system');
       const media = require('expo-media-library');
-      const url = getWallpaperUrl(item);
+      const url = getWallpaperUrl(item, 'dl');
       const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
       await fs.downloadAsync(url, fileUri);
       const asset = await media.createAssetAsync(fileUri);
@@ -119,10 +145,16 @@ export default function MotivationScreen() {
     const source = item.source || item.surah || '';
     const title = item.title || '';
     const sub = item.sub || '';
+    const qStyle = getQuoteStyle(text);
 
     return (
       <View style={s.page}>
-        <Image source={{ uri: imgUrl }} style={s.bgImg} resizeMode="cover" />
+        <Image
+          source={{ uri: imgUrl }}
+          style={s.bgImg}
+          resizeMode="cover"
+          fadeDuration={0}
+        />
         <View style={s.overlay}>
           <SafeAreaView style={s.pageInner} edges={['top']}>
             {/* Top row: pill + bookmark */}
@@ -146,7 +178,7 @@ export default function MotivationScreen() {
             {/* Quote */}
             <View style={s.quoteWrap}>
               <Text style={s.quoteIcon}>"</Text>
-              <Text style={s.quoteText}>{text}</Text>
+              <Text style={[s.quoteText, qStyle]}>{text}</Text>
               {source ? <Text style={s.sourceText}>{source}</Text> : null}
             </View>
 
@@ -286,7 +318,7 @@ const s = StyleSheet.create({
     marginBottom: -16, lineHeight: 72,
   },
   quoteText: {
-    fontSize: 21, color: '#fff', fontWeight: '400', lineHeight: 32,
+    color: '#fff', fontWeight: '400',
     letterSpacing: 0.3, fontStyle: 'italic',
   },
   sourceText: {
@@ -294,7 +326,7 @@ const s = StyleSheet.create({
   },
   bottomRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: 24,
+    paddingBottom: 96,
   },
   titleText: {
     fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '600',
