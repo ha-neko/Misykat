@@ -18,12 +18,36 @@ const PAGE_SIZE = 4;
 // full-resolution wallpaper for display + download
 const FULL_W = Math.round(SCREEN_W);
 const FULL_H = Math.round(SCREEN_H);
-const DL_W = 1080;
-const DL_H = 1920;
+
+// themed image keywords per category (loremflickr matches by keyword)
+const THEME_KEYWORDS = {
+  pekerjaan: 'office,business',
+  keluarga: 'family,home',
+  umum: 'nature,landscape',
+  ibadah: 'mosque,islam',
+};
+
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
 
 function getWallpaperUrl(item, size) {
   const base = item.id || 'umum';
-  if (size === 'dl') return `https://picsum.photos/seed/${base}/${DL_W}/${DL_H}`;
+  if (size === 'dl') {
+    return `https://loremflickr.com/1080/1920/${THEME_KEYWORDS[item.cat] || THEME_KEYWORDS.umum}?lock=${simpleHash(base) % 999}`;
+  }
+  const kw = THEME_KEYWORDS[item.cat] || THEME_KEYWORDS.umum;
+  const lock = simpleHash(base) % 999;
+  return `https://loremflickr.com/${FULL_W}/${FULL_H}/${kw}?lock=${lock}`;
+}
+
+function getFallbackWallpaperUrl(item) {
+  const base = item.id || 'umum';
   return `https://picsum.photos/seed/${base}/${FULL_W}/${FULL_H}`;
 }
 
@@ -52,6 +76,7 @@ export default function MotivationScreen() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [dlPending, setDlPending] = useState({});
+  const [imgFail, setImgFail] = useState({});
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -181,7 +206,7 @@ export default function MotivationScreen() {
 
   function renderPage(item, isFromFav) {
     const isFavd = favIds.has(item.id);
-    const imgUrl = getWallpaperUrl(item);
+    const imgUrl = imgFail[item.id] ? getFallbackWallpaperUrl(item) : getWallpaperUrl(item);
     const loadingDl = dlPending[item.id];
     const text = item.quote || item.ayat || item.text || '';
     const source = item.source || item.surah || '';
@@ -203,6 +228,9 @@ export default function MotivationScreen() {
             resizeMode="cover"
             fadeDuration={0}
             onLoad={() => { imgReadyRef.current[item.id] = true; }}
+            onError={() => {
+              if (!imgFail[item.id]) setImgFail(prev => ({ ...prev, [item.id]: true }));
+            }}
           />
           <View style={s.overlay}>
             <View style={s.pinContent}>

@@ -61,6 +61,12 @@ export function getCachedVerse(id) { return CACHE.get(id) || null; }
 const ID_CACHE = new Set();
 
 // ---- helpers ----
+const MAX_QUOTE_LEN = 260;
+
+function passLen(item) {
+  return !!item && (item.quote || '').length <= MAX_QUOTE_LEN;
+}
+
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -252,17 +258,19 @@ export async function fetchBatch(cat, count = 6) {
     const results = await Promise.all(
       queries.map(q => quranSearch(q, cat, q))
     );
-    let flat = shuffle(results.flat());
+    let flat = shuffle(results.flat()).filter(passLen);
 
     // 2) top up with hadith if still short
     if (flat.length < count) {
       const needed = count - flat.length;
       const promises = [];
       for (let i = 0; i < needed * 3; i++) promises.push(hadithRandom(cat));
-      const hadith = (await Promise.all(promises)).filter(Boolean);
+      const hadith = (await Promise.all(promises)).filter(Boolean).filter(passLen);
       flat = shuffle([...flat, ...hadith]);
     }
 
+    // short quotes first
+    flat.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
     return flat.slice(0, count);
   }
 
@@ -273,9 +281,11 @@ export async function fetchBatch(cat, count = 6) {
   for (let i = 0; i < count; i++) tasks.push(hadithRandom('umum'));
   for (let i = 0; i < count; i++) tasks.push(quoteRandom('umum'));
 
-  const completed = (await Promise.all(tasks)).filter(Boolean);
+  const completed = (await Promise.all(tasks)).filter(Boolean).filter(passLen);
   all.push(...completed);
 
+  // short quotes first
+  all.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
   return shuffle(all).slice(0, count);
 }
 
