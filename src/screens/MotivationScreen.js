@@ -110,10 +110,9 @@ export default function MotivationScreen() {
     });
   }
 
-  async function handleFav(id) {
-    await toggleFavorite(id);
-    const ids = await getFavIds();
-    setFavIdsState(new Set(ids));
+  async function handleFav(item) {
+    await toggleFavorite(item);
+    await loadFavs();
   }
 
   async function handleDownload(item) {
@@ -122,6 +121,13 @@ export default function MotivationScreen() {
     try {
       const fs = require('expo-file-system');
       const media = require('expo-media-library');
+
+      const perm = await media.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Izin dibutuhkan', 'Berikan izin akses media untuk menyimpan wallpaper');
+        return;
+      }
+
       const url = getWallpaperUrl(item, 'dl');
       const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
       await fs.downloadAsync(url, fileUri);
@@ -167,7 +173,7 @@ export default function MotivationScreen() {
                   <Text style={s.catLabel}>{getCategoryLabel(item.cat)}</Text>
                 ) : null}
               </View>
-              <TouchableOpacity onPress={() => handleFav(item.id)} hitSlop={12}>
+              <TouchableOpacity onPress={() => handleFav(item)} hitSlop={12}>
                 {isFavd
                   ? <BookmarkFillIcon color="#FFD700" size={22} />
                   : <BookmarkIcon color="rgba(255,255,255,0.7)" size={22} />

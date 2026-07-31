@@ -15,25 +15,38 @@ export function getCategoryLabel(cat) {
 export async function getFavorites() {
   try {
     const raw = await AsyncStorage.getItem(FAV_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const arr = raw ? JSON.parse(raw) : [];
+    return arr.filter(i => i && typeof i === 'object');
   } catch { return []; }
 }
 
 export async function getFavIds() {
   try {
     const raw = await AsyncStorage.getItem(FAV_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const arr = raw ? JSON.parse(raw) : [];
+    return arr
+      .map(i => (typeof i === 'string' ? i : i && i.id))
+      .filter(Boolean);
   } catch { return []; }
 }
 
-export async function toggleFavorite(id) {
+export async function toggleFavorite(item) {
   try {
+    const id = typeof item === 'string' ? item : item && item.id;
+    if (!id) return false;
+
     const raw = await AsyncStorage.getItem(FAV_KEY);
-    let ids = raw ? JSON.parse(raw) : [];
-    if (ids.includes(id)) ids = ids.filter(i => i !== id);
-    else ids.push(id);
-    await AsyncStorage.setItem(FAV_KEY, JSON.stringify(ids));
-    return ids.includes(id);
+    let arr = raw ? JSON.parse(raw) : [];
+    const exists = arr.some(i => (typeof i === 'string' ? i : i && i.id) === id);
+
+    if (exists) {
+      arr = arr.filter(i => (typeof i === 'string' ? i : i && i.id) !== id);
+    } else {
+      arr.push(item); // store the full item object
+    }
+
+    await AsyncStorage.setItem(FAV_KEY, JSON.stringify(arr));
+    return !exists;
   } catch { return false; }
 }
 
