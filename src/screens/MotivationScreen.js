@@ -143,6 +143,8 @@ export default function MotivationScreen() {
 
       await waitForImage(id);
 
+      const fs = require('expo-file-system');
+
       // primary: capture the Pinterest-style quote pin
       const node = pinRefs.current[id];
       if (node) {
@@ -152,19 +154,19 @@ export default function MotivationScreen() {
             quality: 0.95,
             result: 'tmpfile',
           });
-          // saveToLibraryAsync writes to the PUBLIC MediaStore —
-          // guaranteed visible in gallery apps (unlike createAlbumAsync
-          // which can land in app-scoped storage on Android 10+)
-          await media.saveToLibraryAsync(uri);
-          Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
-          return;
+          // sanity check: make sure the capture produced a real file
+          const info = await fs.getInfoAsync(uri);
+          if (info && info.exists && info.size > 0) {
+            await media.saveToLibraryAsync(uri);
+            Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
+            return;
+          }
         } catch {
           // fall through to wallpaper fallback
         }
       }
 
       // fallback: full-resolution wallpaper
-      const fs = require('expo-file-system');
       const url = getWallpaperUrl(item, 'dl');
       const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
       await fs.downloadAsync(url, fileUri);
@@ -215,6 +217,9 @@ export default function MotivationScreen() {
               {title && title !== source ? (
                 <Text style={s.titleText} numberOfLines={1}>{title}</Text>
               ) : null}
+              <View style={s.watermark}>
+                <Text style={s.watermarkText}>MISYKAT</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -371,6 +376,16 @@ const s = StyleSheet.create({
   titleText: {
     fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 8,
     fontWeight: '400', textAlign: 'center',
+  },
+  watermark: {
+    position: 'absolute', bottom: 36, alignSelf: 'center',
+    paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+  },
+  watermarkText: {
+    fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 3,
   },
   favBtn: {
     position: 'absolute', top: 76, right: 20, zIndex: 20,
