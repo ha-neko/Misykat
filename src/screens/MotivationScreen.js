@@ -44,6 +44,7 @@ export default function MotivationScreen() {
   const listRef = useRef(null);
   const pinRefs = useRef({});
   const imgReadyRef = useRef({});
+  const [viewportH, setViewportH] = useState(SCREEN_H);
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
@@ -143,25 +144,34 @@ export default function MotivationScreen() {
 
       await waitForImage(id);
 
+      const fs = require('expo-file-system');
+
       // capture the Pinterest-style quote pin — the ONLY download path
       const node = pinRefs.current[id];
-      if (!node) throw new Error('no pin node');
+      if (!node) throw new Error('pin view tidak tersedia');
 
-      const uri = await captureRef(node, {
+      const tmpUri = await captureRef(node, {
         format: 'jpg',
         quality: 0.95,
         result: 'tmpfile',
       });
 
       // sanity check: make sure the capture produced a real file
-      const fs = require('expo-file-system');
-      const info = await fs.getInfoAsync(uri);
-      if (!info || !info.exists || info.size <= 0) throw new Error('empty capture');
+      const info = await fs.getInfoAsync(tmpUri);
+      if (!info || !info.exists || info.size <= 0) throw new Error('hasil capture kosong');
 
-      await media.saveToLibraryAsync(uri);
+      // copy to a stable cache path — some devices can't hand
+      // view-shot's internal temp dir to the media store
+      const destUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.jpg`;
+      await fs.copyAsync({ from: tmpUri, to: destUri });
+
+      await media.saveToLibraryAsync(destUri);
       Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
-    } catch {
-      Alert.alert('Gagal', 'Tidak dapat menyimpan gambar');
+    } catch (e) {
+      Alert.alert(
+        'Gagal',
+        'Tidak dapat menyimpan gambar' + (e && e.message ? `\n(${e.message})` : '')
+      );
     } finally {
       if (mounted.current) setDlPending(prev => ({ ...prev, [id]: false }));
     }
@@ -180,7 +190,7 @@ export default function MotivationScreen() {
     const qStyle = getQuoteStyle(text);
 
     return (
-      <View style={s.page}>
+      <View style={[s.page, { height: viewportH }]}>
         {/* Captured pin: wallpaper + quote — Pinterest post style */}
         <View
           ref={node => { pinRefs.current[item.id] = node; }}
@@ -241,7 +251,10 @@ export default function MotivationScreen() {
   }
 
   return (
-    <View style={s.root}>
+    <View
+      style={s.root}
+      onLayout={e => setViewportH(Math.round(e.nativeEvent.layout.height))}
+    >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Floating tab bar */}
@@ -274,12 +287,12 @@ export default function MotivationScreen() {
 
       {/* Content */}
       {loading && activeTab !== '_fav' ? (
-        <View style={[s.page, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[s.page, { height: viewportH, justifyContent: 'center', alignItems: 'center' }]}>
           <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
         </View>
       ) : isFavTab ? (
         favItems.length === 0 ? (
-          <View style={[s.page, { backgroundColor: '#0d0d0d' }]}>
+          <View style={[s.page, { height: viewportH, backgroundColor: '#0d0d0d' }]}>
             <View style={s.overlay}>
               <View style={s.emptyContent}>
                 <BookmarkIcon color="rgba(255,255,255,0.2)" size={50} />
@@ -327,7 +340,7 @@ export default function MotivationScreen() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  page: { height: SCREEN_H, width: SCREEN_W },
+  page: { width: SCREEN_W },
   pin: { flex: 1 },
   bgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   overlay: {
@@ -413,5 +426,5 @@ const s = StyleSheet.create({
     fontSize: 14, color: 'rgba(255,255,255,0.25)', textAlign: 'center',
     lineHeight: 20, paddingHorizontal: 48,
   },
-  footer: { height: SCREEN_H, justifyContent: 'center', alignItems: 'center' },
+  footer: { height: 120, justifyContent: 'center', alignItems: 'center' },
 });
