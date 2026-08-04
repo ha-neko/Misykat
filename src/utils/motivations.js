@@ -55,10 +55,19 @@ const SEEN = new Set();
 export function markSeen(id) { SEEN.add(id); }
 export function resetSeen() { SEEN.clear(); }
 
-// ---- global verse cache + dedup set ----
+// ---- global verse cache ----
 const CACHE = new Map();
 export function getCachedVerse(id) { return CACHE.get(id) || null; }
-const ID_CACHE = new Set();
+
+// ---- per-category themed pools (keyword-matched quran verses) ----
+// POOL[cat] = queue of unseen items; SEEN_CAT[cat] = ids already pooled
+const POOL = Object.create(null);
+const SEEN_CAT = Object.create(null);
+
+function getCatState(cat) {
+  if (!SEEN_CAT[cat]) { SEEN_CAT[cat] = new Set(); POOL[cat] = []; }
+  return { seen: SEEN_CAT[cat], pool: POOL[cat] };
+}
 
 // ---- helpers ----
 const MAX_QUOTE_LEN = 260;
@@ -98,8 +107,6 @@ const CAT_QUERIES = {
 function quranMatchToItem(match, cat, sub) {
   const { surah, numberInSurah, text } = match;
   const id = `q-${surah.number}-${numberInSurah}`;
-  if (ID_CACHE.has(id)) return null;
-  ID_CACHE.add(id);
 
   const item = {
     id,
@@ -139,8 +146,6 @@ async function quranRandom(cat) {
     if (!arabic) return null;
     const { surah, numberInSurah } = arabic;
     const id = `q-${surah.number}-${numberInSurah}`;
-    if (ID_CACHE.has(id)) return null;
-    ID_CACHE.add(id);
 
     const item = {
       id,
@@ -179,9 +184,6 @@ async function hadithRandom(cat) {
   const number = Math.floor(Math.random() * narrator.total) + 1;
   const id = `h-${narrator.slug}-${number}`;
 
-  if (ID_CACHE.has(id)) return null;
-  ID_CACHE.add(id);
-
   try {
     const resp = await fetch(
       `https://hadis-api-id.vercel.app/hadith/${narrator.slug}/${number}`
@@ -216,9 +218,6 @@ async function quoteRandom(cat) {
     const { q, a } = json[0];
     const id = `t-${simpleHash(q + a)}`;
 
-    if (ID_CACHE.has(id)) return null;
-    ID_CACHE.add(id);
-
     const item = {
       id,
       cat: cat || 'umum',
@@ -249,44 +248,62 @@ const PROVIDER_ORDER = {
 //  PUBLIC API — used by MotivationScreen
 // ============================================================
 
+/// refill the themed pool with fresh keyword-matched quran verses
+async function refillSearchPool(cat) {
+  const queries = CAT_QUERIES[cat] || [];
+  if (queries.length === 0) return;
+
+  const { seen, pool } = getCatState(cat);
+
+  const results = await Promise.all(
+    queries.map(q => quranSearch(q, cat, q))
+  );
+  const fresh = shuffle(results.flat()).filter(
+    i => i && !seen.has(i.id) && passLen(i)
+  );
+
+  for (const item of fresh) {
+    seen.add(item.id);
+    pool.push(item);
+  }
+  shuffle(pool);
+}
+
 /// initial batch for a category
 export async function fetchBatch(cat, count = 6) {
   const queries = CAT_QUERIES[cat] || [];
 
   if (queries.length > 0) {
-    // 1) quran keyword searches
-    const results = await Promise.all(
-      queries.map(q => quranSearch(q, cat, q))
-    );
-    let flat = shuffle(results.flat()).filter(passLen);
+    // themed keyword-matched verses, paginated from a per-category pool
+    const { pool } = getCatState(cat);
 
-    // 2) top up with hadith if still short
-    if (flat.length < count) {
-      const needed = count - flat.length;
-      const promises = [];
-      for (let i = 0; i < needed * 3; i++) promises.push(hadithRandom(cat));
-      const hadith = (await Promise.all(promises)).filter(Boolean).filter(passLen);
-      flat = shuffle([...flat, ...hadith]);
+    if (pool.length < count) await refillSearchPool(cat);
+
+    // once the themed pool is exhausted, top up with generic
+    // religious content so infinite scroll never dies
+    if (pool.length < count) {
+      const needed = count - pool.length;
+      const tasks = [];
+      for (let i = 0; i < needed * 3; i++) tasks.push(hadithRandom(cat));
+      for (let i = 0; i < needed * 2; i++) tasks.push(quranRandom(cat));
+      const extras = (await Promise.all(tasks)).filter(Boolean).filter(passLen);
+      pool.push(...shuffle(extras));
     }
 
-    // short quotes first
-    flat.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
-    return flat.slice(0, count);
+    const out = pool.splice(0, count);
+    out.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
+    return out;
   }
 
   // umum: mix all three providers
-  const all = [];
   const tasks = [];
   for (let i = 0; i < count * 2; i++) tasks.push(quranRandom('umum'));
   for (let i = 0; i < count; i++) tasks.push(hadithRandom('umum'));
   for (let i = 0; i < count; i++) tasks.push(quoteRandom('umum'));
 
   const completed = (await Promise.all(tasks)).filter(Boolean).filter(passLen);
-  all.push(...completed);
-
-  // short quotes first
-  all.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
-  return shuffle(all).slice(0, count);
+  completed.sort((a, b) => (a.quote || '').length - (b.quote || '').length);
+  return shuffle(completed).slice(0, count);
 }
 
 /// load one more item for infinite scroll
