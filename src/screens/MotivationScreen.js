@@ -4,7 +4,7 @@ import {
   Dimensions, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { captureRef } from 'react-native-view-shot';
+import Svg, { Rect, Image as SvgImage, Text as SvgText, G } from 'react-native-svg';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import {
   getCategories, getCategoryLabel,
@@ -63,12 +63,41 @@ function getQuoteStyle(text) {
   return { fontSize, lineHeight: Math.round(fontSize * 1.5) };
 }
 
+// ---- offscreen SVG quote-pin generator (download) ----
+const PIN_W = 1080;
+const PIN_H = 1620;
+
+function wrapText(text, charsPerLine) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const candidate = line ? `${line} ${w}` : w;
+    if (candidate.length > charsPerLine && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function getPinFontSize(len) {
+  if (len < 60) return 60;
+  if (len < 120) return 52;
+  if (len < 200) return 44;
+  if (len < 300) return 38;
+  return 34;
+}
+
 export default function MotivationScreen() {
   const cats = getCategories();
   const listRef = useRef(null);
-  const pinRefs = useRef({});
-  const imgReadyRef = useRef({});
-  const [viewportH, setViewportH] = useState(SCREEN_H);
+  const svgRef = useRef(null);
+  const svgImgReadyRef = useRef(false);
+  const [svgItem, setSvgItem] = useState(null);
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
@@ -78,6 +107,7 @@ export default function MotivationScreen() {
   const [dlPending, setDlPending] = useState({});
   const [imgFail, setImgFail] = useState({});
   const mounted = useRef(true);
+  const [viewportH, setViewportH] = useState(SCREEN_H);
 
   useEffect(() => {
     mounted.current = true;
@@ -144,17 +174,6 @@ export default function MotivationScreen() {
     await loadFavs();
   }
 
-  function waitForImage(id, timeout = 10000) {
-    return new Promise(resolve => {
-      const t0 = Date.now();
-      (function check() {
-        if (imgReadyRef.current[id]) return resolve(true);
-        if (Date.now() - t0 > timeout) return resolve(false);
-        setTimeout(check, 150);
-      })();
-    });
-  }
-
   async function handleDownload(item) {
     const id = item.id;
     setDlPending(prev => ({ ...prev, [id]: true }));
@@ -167,30 +186,43 @@ export default function MotivationScreen() {
         return;
       }
 
-      await waitForImage(id);
+      // mount the offscreen SVG pin
+      svgImgReadyRef.current = false;
+      setSvgItem(item);
+      await new Promise(r => setTimeout(r, 150));
 
-      const fs = require('expo-file-system');
-
-      // capture the Pinterest-style quote pin — the ONLY download path
-      const node = pinRefs.current[id];
-      if (!node) throw new Error('pin view tidak tersedia');
-
-      const tmpUri = await captureRef(node, {
-        format: 'jpg',
-        quality: 0.95,
-        result: 'tmpfile',
+      // wait for the SVG background image to load (or timeout)
+      await new Promise(resolve => {
+        const t0 = Date.now();
+        (function check() {
+          if (svgImgReadyRef.current) return resolve();
+          if (Date.now() - t0 > 8000) return resolve();
+          setTimeout(check, 100);
+        })();
       });
 
-      // sanity check: make sure the capture produced a real file
-      const info = await fs.getInfoAsync(tmpUri);
-      if (!info || !info.exists || info.size <= 0) throw new Error('hasil capture kosong');
+      // export the SVG to a JPEG data URL
+      const dataUrl = await new Promise((resolve, reject) => {
+        const node = svgRef.current;
+        if (!node || typeof node.toDataURL !== 'function') {
+          return reject(new Error('langkah 1: svg pin tidak tersedia'));
+        }
+        node.toDataURL(
+          d => {
+            if (typeof d === 'string' && d.length > 100) resolve(d);
+            else reject(new Error('langkah 2: hasil render kosong'));
+          },
+          { format: 'jpg', quality: 0.95 }
+        );
+      });
 
-      // copy to a stable cache path — some devices can't hand
-      // view-shot's internal temp dir to the media store
-      const destUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.jpg`;
-      await fs.copyAsync({ from: tmpUri, to: destUri });
+      // strip the data-url prefix and write to a file
+      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      const fs = require('expo-file-system');
+      const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.jpg`;
+      await fs.writeAsStringAsync(fileUri, base64, { encoding: fs.EncodingType.Base64 });
 
-      await media.saveToLibraryAsync(destUri);
+      await media.saveToLibraryAsync(fileUri);
       Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
     } catch (e) {
       Alert.alert(
@@ -216,18 +248,13 @@ export default function MotivationScreen() {
 
     return (
       <View style={[s.page, { height: viewportH }]}>
-        {/* Captured pin: wallpaper + quote — Pinterest post style */}
-        <View
-          ref={node => { pinRefs.current[item.id] = node; }}
-          collapsable={false}
-          style={s.pin}
-        >
+        {/* on-screen pin (display only) */}
+        <View style={s.pin}>
           <Image
             source={{ uri: imgUrl }}
             style={s.bgImg}
             resizeMode="cover"
             fadeDuration={0}
-            onLoad={() => { imgReadyRef.current[item.id] = true; }}
             onError={() => {
               if (!imgFail[item.id]) setImgFail(prev => ({ ...prev, [item.id]: true }));
             }}
@@ -250,7 +277,7 @@ export default function MotivationScreen() {
           </View>
         </View>
 
-        {/* Interactive UI — outside the captured pin */}
+        {/* Interactive UI — outside the pin */}
         <TouchableOpacity
           style={s.favBtn}
           onPress={() => handleFav(item)}
@@ -275,6 +302,91 @@ export default function MotivationScreen() {
           )}
         </TouchableOpacity>
       </View>
+    );
+  }
+
+  function renderPinSvg(item) {
+    const text = item.quote || '';
+    const source = item.source || '';
+    const title = item.title || '';
+    const sub = item.sub || '';
+    const fontSize = getPinFontSize(text.length);
+    const lh = Math.round(fontSize * 1.4);
+    const charsPerLine = Math.max(10, Math.floor((PIN_W - 180) / (fontSize * 0.6)));
+    const lines = wrapText(text, charsPerLine);
+    const blockH = lines.length * lh;
+    const blockStart = 600;
+    const imgUrl = imgFail[item.id] ? getFallbackWallpaperUrl(item) : getWallpaperUrl(item);
+    const pillW = Math.max(100, sub.length * 26 + 70);
+
+    return (
+      <Svg ref={svgRef} width={PIN_W} height={PIN_H}>
+        <SvgImage
+          href={{ uri: imgUrl }}
+          width={PIN_W}
+          height={PIN_H}
+          preserveAspectRatio="xMidYMidSlice"
+          onLoad={() => { svgImgReadyRef.current = true; }}
+          onError={() => { svgImgReadyRef.current = true; }}
+        />
+        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="rgba(0,0,0,0.45)" />
+        {sub ? (
+          <G>
+            <Rect
+              x={(PIN_W - pillW) / 2} y={340} width={pillW} height={60} rx={30}
+              fill="rgba(0,0,0,0.45)" stroke="rgba(255,255,255,0.25)" strokeWidth={2}
+            />
+            <SvgText
+              x={PIN_W / 2} y={380} textAnchor="middle" fontSize={28}
+              fontWeight="700" fill="#fff" letterSpacing={3}
+            >
+              {String(sub).toUpperCase()}
+            </SvgText>
+          </G>
+        ) : null}
+        <SvgText
+          x={PIN_W / 2} y={470} textAnchor="middle" fontSize={120}
+          fontWeight="700" fill="rgba(255,255,255,0.25)"
+        >
+          "
+        </SvgText>
+        {lines.map((ln, i) => (
+          <SvgText
+            key={i}
+            x={PIN_W / 2} y={blockStart + i * lh}
+            textAnchor="middle" fontSize={fontSize} fill="#fff"
+            fontStyle="italic" fontWeight="400"
+          >
+            {ln}
+          </SvgText>
+        ))}
+        {source ? (
+          <SvgText
+            x={PIN_W / 2} y={blockStart + blockH + 64} textAnchor="middle"
+            fontSize={30} fill="rgba(255,255,255,0.75)" fontWeight="500"
+          >
+            {source}
+          </SvgText>
+        ) : null}
+        {title && title !== source ? (
+          <SvgText
+            x={PIN_W / 2} y={blockStart + blockH + 116} textAnchor="middle"
+            fontSize={26} fill="rgba(255,255,255,0.5)"
+          >
+            {title}
+          </SvgText>
+        ) : null}
+        <Rect
+          x={(PIN_W - 240) / 2} y={PIN_H - 130} width={240} height={50} rx={25}
+          fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.15)" strokeWidth={2}
+        />
+        <SvgText
+          x={PIN_W / 2} y={PIN_H - 98} textAnchor="middle" fontSize={24}
+          fontWeight="700" fill="rgba(255,255,255,0.6)" letterSpacing={8}
+        >
+          MISYKAT
+        </SvgText>
+      </Svg>
     );
   }
 
@@ -362,6 +474,11 @@ export default function MotivationScreen() {
           }
         />
       )}
+
+      {/* offscreen SVG used for download export */}
+      <View style={s.svgHidden}>
+        {svgItem ? renderPinSvg(svgItem) : null}
+      </View>
     </View>
   );
 }
@@ -455,4 +572,5 @@ const s = StyleSheet.create({
     lineHeight: 20, paddingHorizontal: 48,
   },
   footer: { height: 120, justifyContent: 'center', alignItems: 'center' },
+  svgHidden: { position: 'absolute', left: -9999, top: 0, width: PIN_W, height: PIN_H },
 });
