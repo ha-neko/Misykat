@@ -113,7 +113,7 @@ Native (Android) — via Expo Modules API
 
 | Prayer Times | Motivation | Settings |
 |:---:|:---:|:---:|
-| <img src="screenshot/prayer.jpeg" width="200"/> | <img src="screenshot/motivation.jpeg" width="200"/> | <img src="screenshot/setting.jpeg" width="200"/> |
+| <img src="screenshot/prayer.jpeg" width="200"/> | <img src="screenshot/motivation.png" width="200"/> | <img src="screenshot/setting.jpeg" width="200"/> |
 
 ---
 
