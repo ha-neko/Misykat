@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { scheduleAlarm } from '../utils/notifications';
 import { ShuffleIcon, ScrollIcon, BookIcon, SpeakerIcon, StarIcon } from '../components/Icons';
 import TimePicker from '../components/TimePicker';

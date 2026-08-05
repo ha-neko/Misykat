@@ -1,4 +1,6 @@
-import * as FileSystem from 'expo-file-system';
+// SDK 54: legacy file API lives in expo-file-system/legacy; the main
+// entry only exports the new File/Directory/Paths classes
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CACHE_DIR = FileSystem.documentDirectory + 'audio_cache/';

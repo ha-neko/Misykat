@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getAlarms, deleteAlarm } from '../utils/notifications';
 import { scheduleNativeAlarm, cancelNativeAlarm } from '../utils/nativeAlarm';
 import AsyncStorage from '@react-native-async-storage/async-storage';

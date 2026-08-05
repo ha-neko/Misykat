@@ -232,8 +232,10 @@ export default function MotivationScreen() {
       });
 
       // strip the data-url prefix and write to a file
+      // NOTE: SDK 54 moved the legacy file API to expo-file-system/legacy —
+      // the main entry only has the new File/Directory/Paths classes
       const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-      const fs = require('expo-file-system');
+      const fs = require('expo-file-system/legacy');
       const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.png`;
       await fs.writeAsStringAsync(fileUri, base64, { encoding: fs.EncodingType.Base64 });
 
