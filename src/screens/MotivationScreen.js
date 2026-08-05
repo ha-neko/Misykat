@@ -204,10 +204,12 @@ export default function MotivationScreen() {
 
       // export the SVG to a data URL — with timeout + one retry
       // (known react-native-svg quirk: callback may not fire on 1st call).
-      // NOTE: no options argument — Android's toDataURL only reads
-      // width/height from options and always exports PNG; passing
-      // {format, quality} makes native call options.getInt("width") on a
-      // missing key and crash.
+      // options MUST contain width/height: the native side reads
+      // options.getInt("width")/getInt("height") and creates the output
+      // bitmap at exactly that size — without a viewBox the content is
+      // drawn at raw user units into a density-scaled canvas (white/blank
+      // export), and missing keys throw natively. format/quality are
+      // ignored on Android (always PNG) so they're not passed.
       const dataUrl = await new Promise((resolve, reject) => {
         let attempts = 0;
         const attempt = () => {
@@ -225,7 +227,8 @@ export default function MotivationScreen() {
               if (typeof d === 'string' && d.length > 100) resolve(d);
               else if (attempts < 1) { attempts++; attempt(); }
               else reject(new Error('langkah 3: hasil render kosong'));
-            }
+            },
+            { width: PIN_W, height: PIN_H }
           );
         };
         attempt();
@@ -352,7 +355,12 @@ export default function MotivationScreen() {
     const g = THEME_GRADIENTS[item.cat] || THEME_GRADIENTS.umum;
 
     return (
-      <Svg ref={svgRef} width={PIN_W} height={PIN_H}>
+      <Svg
+        ref={svgRef}
+        width={PIN_W}
+        height={PIN_H}
+        viewBox={`0 0 ${PIN_W} ${PIN_H}`}
+      >
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={g.top} />
