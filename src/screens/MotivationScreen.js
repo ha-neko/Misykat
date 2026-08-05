@@ -63,9 +63,13 @@ function getQuoteStyle(text) {
 const PIN_W = 1080;
 const PIN_H = 1620;
 
-// theme gradient per category — pure vector, so the export is a small PNG
-// (embedding the photo wallpaper in the SVG caused native OOM: Android's
-// toDataURL always exports PNG and ignores format/quality)
+// on-screen preview size for the download overlay (design stays 1080x1620
+// via viewBox; the preview just needs to be big enough for a crisp capture)
+const PREVIEW_W = Math.min(SCREEN_W - 32, 420);
+const PREVIEW_H = Math.round(PREVIEW_W * (PIN_H / PIN_W));
+
+// theme gradient per category — pure vector (no photo in the pin; the
+// photo wallpaper caused native OOM when embedded in the export)
 const THEME_GRADIENTS = {
   pekerjaan: { top: '#2b3a67', bottom: '#0d1226' },
   keluarga: { top: '#6b2b3f', bottom: '#1c0d14' },
@@ -184,6 +188,7 @@ export default function MotivationScreen() {
     setDlPending(prev => ({ ...prev, [id]: true }));
     try {
       const media = require('expo-media-library');
+      const fs = require('expo-file-system/legacy');
 
       const perm = await media.requestPermissionsAsync();
       if (perm.status !== 'granted') {
@@ -191,7 +196,9 @@ export default function MotivationScreen() {
         return;
       }
 
-      // mount the offscreen SVG pin and wait for it to be in the tree
+      // mount the pin VISIBLY in an overlay — a visible view is already
+      // rendered (cached bitmap exists), so the capture never races the
+      // SVG renderer the way toDataURL did (blank exports on this stack)
       setSvgItem(item);
       await new Promise(resolve => {
         const t0 = Date.now();
@@ -201,50 +208,42 @@ export default function MotivationScreen() {
           setTimeout(check, 50);
         })();
       });
+      // let the first frame actually draw before capturing
+      await new Promise(r => setTimeout(r, 400));
 
-      // export the SVG to a data URL — with timeout + one retry
-      // (known react-native-svg quirk: callback may not fire on 1st call).
-      // options MUST contain width/height: the native side reads
-      // options.getInt("width")/getInt("height") and creates the output
-      // bitmap at exactly that size — without a viewBox the content is
-      // drawn at raw user units into a density-scaled canvas (white/blank
-      // export), and missing keys throw natively. format/quality are
-      // ignored on Android (always PNG) so they're not passed.
-      const dataUrl = await new Promise((resolve, reject) => {
+      // capture the visible pin via react-native-view-shot — snapshots the
+      // already-rendered view, upscaled to the target pin resolution
+      const viewShot = require('react-native-view-shot');
+      const uri = await new Promise((resolve, reject) => {
         let attempts = 0;
         const attempt = () => {
-          const node = svgRef.current;
-          if (!node || typeof node.toDataURL !== 'function') {
-            return reject(new Error('langkah 1: svg pin tidak tersedia'));
-          }
-          const timer = setTimeout(() => {
-            if (attempts < 1) { attempts++; attempt(); }
-            else reject(new Error('langkah 2: toDataURL timeout'));
-          }, 4000);
-          node.toDataURL(
-            d => {
-              clearTimeout(timer);
-              if (typeof d === 'string' && d.length > 100) resolve(d);
-              else if (attempts < 1) { attempts++; attempt(); }
-              else reject(new Error('langkah 3: hasil render kosong'));
-            },
-            { width: PIN_W, height: PIN_H }
-          );
+          viewShot
+            .captureRef(svgRef.current, {
+              format: 'png',
+              quality: 1,
+              result: 'tmpfile',
+              width: PIN_W,
+              height: PIN_H,
+            })
+            .then(resolve)
+            .catch(e => {
+              if (attempts < 1) {
+                attempts++;
+                setTimeout(attempt, 300);
+              } else {
+                reject(new Error(`langkah 1: capture gagal (${e.message})`));
+              }
+            });
         };
         attempt();
       });
 
-      // strip the data-url prefix and write to a file
-      // NOTE: SDK 54 moved the legacy file API to expo-file-system/legacy —
-      // the main entry only has the new File/Directory/Paths classes
-      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-      const fs = require('expo-file-system/legacy');
+      // view-shot tmpfiles have no extension — copy to a .png path so the
+      // gallery detects the MIME type correctly, then verify it's non-empty
       const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.png`;
-      await fs.writeAsStringAsync(fileUri, base64, { encoding: fs.EncodingType.Base64 });
-
-      // verify the file exists and is non-empty
+      await fs.copyAsync({ from: uri, to: fileUri });
       const info = await fs.getInfoAsync(fileUri);
-      if (!info || !info.exists || info.size <= 0) throw new Error('langkah 4: file kosong');
+      if (!info || !info.exists || info.size <= 0) throw new Error('langkah 2: hasil capture kosong');
 
       // save to gallery — createAssetAsync is the most reliable on
       // Android 10+ (write-only MediaStore contribution, no read
@@ -262,8 +261,7 @@ export default function MotivationScreen() {
         'Tidak dapat menyimpan gambar' + (e && e.message ? `\n(${e.message})` : '')
       );
     } finally {
-      // unmount the offscreen SVG — keep it out of the live hierarchy so
-      // toDataURL never races the normal renderer (double-render crash)
+      // unmount the preview overlay
       setSvgItem(null);
       if (mounted.current) setDlPending(prev => ({ ...prev, [id]: false }));
     }
@@ -340,7 +338,7 @@ export default function MotivationScreen() {
     );
   }
 
-  function renderPinSvg(item) {
+  function renderPinSvg(item, w, h) {
     const text = item.quote || '';
     const source = item.source || '';
     const title = item.title || '';
@@ -357,8 +355,8 @@ export default function MotivationScreen() {
     return (
       <Svg
         ref={svgRef}
-        width={PIN_W}
-        height={PIN_H}
+        width={w}
+        height={h}
         viewBox={`0 0 ${PIN_W} ${PIN_H}`}
       >
         <Defs>
@@ -518,10 +516,19 @@ export default function MotivationScreen() {
         />
       )}
 
-      {/* offscreen SVG used for download export */}
-      <View style={s.svgHidden}>
-        {svgItem ? renderPinSvg(svgItem) : null}
-      </View>
+      {/* download preview overlay — the pin renders VISIBLY here, then
+          gets captured by react-native-view-shot */}
+      {svgItem ? (
+        <View style={s.dlOverlay}>
+          <View style={s.dlCard}>
+            {renderPinSvg(svgItem, PREVIEW_W, PREVIEW_H)}
+          </View>
+          <View style={s.dlStatus}>
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+            <Text style={s.dlStatusText}>Menyimpan gambar…</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -615,5 +622,29 @@ const s = StyleSheet.create({
     lineHeight: 20, paddingHorizontal: 48,
   },
   footer: { height: 120, justifyContent: 'center', alignItems: 'center' },
-  svgHidden: { position: 'absolute', left: -9999, top: 0, width: PIN_W, height: PIN_H },
+  dlOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 18,
+  },
+  dlCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  dlStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dlStatusText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
 });

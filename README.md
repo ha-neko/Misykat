@@ -90,7 +90,7 @@ Native (Android) — via Expo Modules API
 - Pool tematik per kategori di-paginate, sehingga konten tetap relevan dan infinite scroll tidak pernah berhenti
 - Quote dibatasi ±260 karakter, diurutkan pendek-dahulu
 - Wallpaper mengikuti tema kategori (LoremFlickr per kata kunci, fallback picsum)
-- Download menghasilkan gambar quote ala Pinterest (1080×1620): kartu gradien bertema kategori diexport `react-native-svg` `toDataURL` (pure vector — kecil, anti-crash) → galeri (`createAssetAsync`, fallback `saveToLibraryAsync`)
+- Download menghasilkan gambar quote ala Pinterest (1080×1620): kartu gradien bertema kategori ditampilkan sebagai pratinjau, dicapture `react-native-view-shot` (snapshot view yang sudah ter-render — anti-race, anti-blank) → galeri (`createAssetAsync`, fallback `saveToLibraryAsync`)
 
 ### Alur Alarm
 ```
