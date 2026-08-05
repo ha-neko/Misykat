@@ -54,6 +54,7 @@
 | 🎵 | **Custom sound / MP3** | Pilih audio favorit sebagai nada alarm dari file manager |
 | 📖 | **Streaming Quran & Kajian** | Quran dari EveryDay Quran CDN, kajian Rodja, adhan otomatis |
 | 🕌 | **Waktu sholat** | Berdasarkan lokasi pengguna via `expo-location` + library `adhan` + kalender Hijriyah |
+| 💡 | **Motivasi Islami** | Ayat Al-Qur'an + hadits + kata bijak, 4 kategori bertema, wallpaper sesuai kategori, infinite scroll |
 | 🤖 | **Rekomendasi konten** | Sistem rekomendasi lokal berdasarkan preferensi pengguna |
 | 🌙 | **Tema gelap/terang** | Material 3, Auto-save di AsyncStorage |
 | 🌐 | **Dua bahasa** | Indonesia (default) dan Inggris |
@@ -65,9 +66,9 @@
 
 ```
 JavaScript (React Native)
-├── Screens: Home, AddAlarm, AlarmRinging, PrayerTimes, Settings, Permission
-├── Utils: nativeAlarm, notifications, audio, cache, recommendation, hijri
-├── Components: HoldArrow, TimePicker, TabIcons
+├── Screens: Home, AddAlarm, AlarmRinging, PrayerTimes, Motivation, Settings, Permission
+├── Utils: nativeAlarm, notifications, audio, cache, recommendation, hijri, motivations
+├── Components: HoldArrow, TimePicker, TabIcons, Icons
 └── Theme: Material 3 dark/light + LanguageContext (ID/EN)
 
 Native (Android) — via Expo Modules API
@@ -76,6 +77,20 @@ Native (Android) — via Expo Modules API
 ├── AlarmReceiver.java          — Terima broadcast → start foreground service
 └── MainActivity (patched)      — showWhenLocked, onNewIntent
 ```
+
+### Sumber Konten Motivasi
+
+| Sumber | API | Penggunaan |
+|--------|-----|------------|
+| Al-Qur'an | `api.alquran.cloud` | Search per kata kunci kategori + ayat acak |
+| Hadits | `hadis-api-id.vercel.app` | 9 perawi (Bukhari, Muslim, dsb.) — pelengkap setelah pool tematik habis |
+| Kata bijak | `zenquotes.io` | Khusus kategori *umum* |
+
+- 4 kategori: **Pekerjaan, Keluarga, Umum, Ibadah** — ayat dicari per kata kunci (`bekerja, rezeki, usaha, …`)
+- Pool tematik per kategori di-paginate, sehingga konten tetap relevan dan infinite scroll tidak pernah berhenti
+- Quote dibatasi ±260 karakter, diurutkan pendek-dahulu
+- Wallpaper mengikuti tema kategori (LoremFlickr per kata kunci, fallback picsum)
+- Download menghasilkan gambar quote ala Pinterest (1080×1620) via export `react-native-svg` → galeri (`saveToLibraryAsync`)
 
 ### Alur Alarm
 ```
@@ -96,9 +111,9 @@ Native (Android) — via Expo Modules API
 |:---:|:---:|
 | <img src="screenshot/homepage.jpeg" width="200"/> | <img src="screenshot/alarm.jpeg" width="200"/> |
 
-| Prayer Times | Settings |
-|:---:|:---:|
-| <img src="screenshot/prayer.jpeg" width="200"/> | <img src="screenshot/setting.jpeg" width="200"/> |
+| Prayer Times | Motivation | Settings |
+|:---:|:---:|:---:|
+| <img src="screenshot/prayer.jpeg" width="200"/> | <img src="screenshot/motivation.jpeg" width="200"/> | <img src="screenshot/setting.jpeg" width="200"/> |
 
 ---
 
@@ -137,6 +152,7 @@ npx eas build --platform android --profile preview
 | `WAKE_LOCK` | Wake lock agar CPU tetap aktif saat alarm |
 | `RECEIVE_BOOT_COMPLETED` | Reschedule alarm setelah reboot |
 | `ACCESS_FINE_LOCATION` | Lokasi untuk waktu sholat |
+| `READ_MEDIA_IMAGES` / `WRITE_EXTERNAL_STORAGE` | Menyimpan gambar quote motivasi ke galeri |
 
 Semua izin diminta saat pertama kali di `PermissionScreen`.
 
