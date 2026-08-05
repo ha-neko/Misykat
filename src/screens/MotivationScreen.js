@@ -4,7 +4,7 @@ import {
   Dimensions, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Rect, Text as SvgText, G, Defs, LinearGradient, RadialGradient, Stop } from 'react-native-svg';
+import { captureRef } from 'react-native-view-shot';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import {
   getCategories, getCategoryLabel,
@@ -59,54 +59,11 @@ function getQuoteStyle(text) {
   return { fontSize, lineHeight: Math.round(fontSize * 1.5) };
 }
 
-// ---- offscreen SVG quote-pin generator (download) ----
-const PIN_W = 1080;
-const PIN_H = 1620;
-
-// on-screen preview size for the download overlay (design stays 1080x1620
-// via viewBox; the preview just needs to be big enough for a crisp capture)
-const PREVIEW_W = Math.min(SCREEN_W - 32, 420);
-const PREVIEW_H = Math.round(PREVIEW_W * (PIN_H / PIN_W));
-
-// theme gradient per category — pure vector (no photo in the pin; the
-// photo wallpaper caused native OOM when embedded in the export)
-const THEME_GRADIENTS = {
-  pekerjaan: { top: '#2b3a67', bottom: '#0d1226' },
-  keluarga: { top: '#6b2b3f', bottom: '#1c0d14' },
-  ibadah: { top: '#1f5c47', bottom: '#081a12' },
-  umum: { top: '#4a2b6b', bottom: '#160b24' },
-};
-
-function wrapText(text, charsPerLine) {
-  const words = String(text || '').split(/\s+/).filter(Boolean);
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const candidate = line ? `${line} ${w}` : w;
-    if (candidate.length > charsPerLine && line) {
-      lines.push(line);
-      line = w;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-function getPinFontSize(len) {
-  if (len < 60) return 60;
-  if (len < 120) return 52;
-  if (len < 200) return 44;
-  if (len < 300) return 38;
-  return 34;
-}
-
 export default function MotivationScreen() {
   const cats = getCategories();
   const listRef = useRef(null);
-  const svgRef = useRef(null);
-  const [svgItem, setSvgItem] = useState(null);
+  const pinRefs = useRef({});
+  const imgReadyRef = useRef({});
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
   const [favItems, setFavItems] = useState([]);
@@ -183,12 +140,22 @@ export default function MotivationScreen() {
     await loadFavs();
   }
 
+  function waitForImage(id, timeout = 10000) {
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      (function check() {
+        if (imgReadyRef.current[id]) return resolve(true);
+        if (Date.now() - t0 > timeout) return resolve(false);
+        setTimeout(check, 150);
+      })();
+    });
+  }
+
   async function handleDownload(item) {
     const id = item.id;
     setDlPending(prev => ({ ...prev, [id]: true }));
     try {
       const media = require('expo-media-library');
-      const fs = require('expo-file-system/legacy');
 
       const perm = await media.requestPermissionsAsync();
       if (perm.status !== 'granted') {
@@ -196,73 +163,39 @@ export default function MotivationScreen() {
         return;
       }
 
-      // mount the pin VISIBLY in an overlay — a visible view is already
-      // rendered (cached bitmap exists), so the capture never races the
-      // SVG renderer the way toDataURL did (blank exports on this stack)
-      setSvgItem(item);
-      await new Promise(resolve => {
-        const t0 = Date.now();
-        (function check() {
-          if (svgRef.current) return resolve();
-          if (Date.now() - t0 > 2000) return resolve();
-          setTimeout(check, 50);
-        })();
-      });
-      // let the first frame actually draw before capturing
-      await new Promise(r => setTimeout(r, 400));
+      await waitForImage(id);
 
-      // capture the visible pin via react-native-view-shot — snapshots the
-      // already-rendered view, upscaled to the target pin resolution
-      const viewShot = require('react-native-view-shot');
-      const uri = await new Promise((resolve, reject) => {
-        let attempts = 0;
-        const attempt = () => {
-          viewShot
-            .captureRef(svgRef.current, {
-              format: 'png',
-              quality: 1,
-              result: 'tmpfile',
-              width: PIN_W,
-              height: PIN_H,
-            })
-            .then(resolve)
-            .catch(e => {
-              if (attempts < 1) {
-                attempts++;
-                setTimeout(attempt, 300);
-              } else {
-                reject(new Error(`langkah 1: capture gagal (${e.message})`));
-              }
-            });
-        };
-        attempt();
-      });
-
-      // view-shot tmpfiles have no extension — copy to a .png path so the
-      // gallery detects the MIME type correctly, then verify it's non-empty
-      const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.png`;
-      await fs.copyAsync({ from: uri, to: fileUri });
-      const info = await fs.getInfoAsync(fileUri);
-      if (!info || !info.exists || info.size <= 0) throw new Error('langkah 2: hasil capture kosong');
-
-      // save to gallery — createAssetAsync is the most reliable on
-      // Android 10+ (write-only MediaStore contribution, no read
-      // permission needed, lands directly in gallery); fall back to
-      // saveToLibraryAsync only if it throws
-      try {
-        await media.createAssetAsync(fileUri);
-      } catch {
-        await media.saveToLibraryAsync(fileUri);
+      // primary: capture the LIVE on-screen Pinterest-style pin (the same
+      // proven path as the 31/07 10:29 build — snapshot the already-rendered
+      // view, hand the tmpfile straight to createAssetAsync, no file copying)
+      const node = pinRefs.current[id];
+      if (node) {
+        try {
+          const uri = await captureRef(node, {
+            format: 'jpg',
+            quality: 0.95,
+            result: 'tmpfile',
+          });
+          const asset = await media.createAssetAsync(uri);
+          await media.createAlbumAsync('Misykat', asset, false);
+          Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
+          return;
+        } catch {
+          // fall through to wallpaper fallback
+        }
       }
-      Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
-    } catch (e) {
-      Alert.alert(
-        'Gagal',
-        'Tidak dapat menyimpan gambar' + (e && e.message ? `\n(${e.message})` : '')
-      );
+
+      // fallback: full-resolution wallpaper
+      const fs = require('expo-file-system/legacy');
+      const url = getWallpaperUrl(item);
+      const fileUri = fs.cacheDirectory + `misykat-${id}.jpg`;
+      await fs.downloadAsync(url, fileUri);
+      const asset = await media.createAssetAsync(fileUri);
+      await media.createAlbumAsync('Misykat', asset, false);
+      Alert.alert('Tersimpan', 'Wallpaper tersimpan ke galeri');
+    } catch {
+      Alert.alert('Gagal', 'Tidak dapat menyimpan gambar');
     } finally {
-      // unmount the preview overlay
-      setSvgItem(null);
       if (mounted.current) setDlPending(prev => ({ ...prev, [id]: false }));
     }
   }
@@ -281,13 +214,18 @@ export default function MotivationScreen() {
 
     return (
       <View style={[s.page, { height: viewportH }]}>
-        {/* on-screen pin (display only) */}
-        <View style={s.pin}>
+        {/* Captured pin: wallpaper + quote — Pinterest post style */}
+        <View
+          ref={node => { pinRefs.current[item.id] = node; }}
+          collapsable={false}
+          style={s.pin}
+        >
           <Image
             source={{ uri: imgUrl }}
             style={s.bgImg}
             resizeMode="cover"
             fadeDuration={0}
+            onLoad={() => { imgReadyRef.current[item.id] = true; }}
             onError={() => {
               if (!imgFail[item.id]) setImgFail(prev => ({ ...prev, [item.id]: true }));
             }}
@@ -335,99 +273,6 @@ export default function MotivationScreen() {
           )}
         </TouchableOpacity>
       </View>
-    );
-  }
-
-  function renderPinSvg(item, w, h) {
-    const text = item.quote || '';
-    const source = item.source || '';
-    const title = item.title || '';
-    const sub = item.sub || '';
-    const fontSize = getPinFontSize(text.length);
-    const lh = Math.round(fontSize * 1.4);
-    const charsPerLine = Math.max(10, Math.floor((PIN_W - 180) / (fontSize * 0.6)));
-    const lines = wrapText(text, charsPerLine);
-    const blockH = lines.length * lh;
-    const blockStart = 600;
-    const pillW = Math.max(100, sub.length * 26 + 70);
-    const g = THEME_GRADIENTS[item.cat] || THEME_GRADIENTS.umum;
-
-    return (
-      <Svg
-        ref={svgRef}
-        width={w}
-        height={h}
-        viewBox={`0 0 ${PIN_W} ${PIN_H}`}
-      >
-        <Defs>
-          <LinearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={g.top} />
-            <Stop offset="1" stopColor={g.bottom} />
-          </LinearGradient>
-          <RadialGradient id="glow" cx="50%" cy="42%" r="62%">
-            <Stop offset="0" stopColor="rgba(255,255,255,0.10)" />
-            <Stop offset="1" stopColor="rgba(255,255,255,0)" />
-          </RadialGradient>
-        </Defs>
-        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="url(#bg)" />
-        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="url(#glow)" />
-        {sub ? (
-          <G>
-            <Rect
-              x={(PIN_W - pillW) / 2} y={340} width={pillW} height={60} rx={30}
-              fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.30)" strokeWidth={2}
-            />
-            <SvgText
-              x={PIN_W / 2} y={380} textAnchor="middle" fontSize={28}
-              fontWeight="700" fill="#fff" letterSpacing={3}
-            >
-              {String(sub).toUpperCase()}
-            </SvgText>
-          </G>
-        ) : null}
-        <SvgText
-          x={PIN_W / 2} y={470} textAnchor="middle" fontSize={120}
-          fontWeight="700" fill="rgba(255,255,255,0.18)"
-        >
-          "
-        </SvgText>
-        {lines.map((ln, i) => (
-          <SvgText
-            key={i}
-            x={PIN_W / 2} y={blockStart + i * lh}
-            textAnchor="middle" fontSize={fontSize} fill="#fff"
-            fontStyle="italic" fontWeight="400"
-          >
-            {ln}
-          </SvgText>
-        ))}
-        {source ? (
-          <SvgText
-            x={PIN_W / 2} y={blockStart + blockH + 64} textAnchor="middle"
-            fontSize={30} fill="rgba(255,255,255,0.75)" fontWeight="500"
-          >
-            {source}
-          </SvgText>
-        ) : null}
-        {title && title !== source ? (
-          <SvgText
-            x={PIN_W / 2} y={blockStart + blockH + 116} textAnchor="middle"
-            fontSize={26} fill="rgba(255,255,255,0.5)"
-          >
-            {title}
-          </SvgText>
-        ) : null}
-        <Rect
-          x={(PIN_W - 240) / 2} y={PIN_H - 130} width={240} height={50} rx={25}
-          fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.20)" strokeWidth={2}
-        />
-        <SvgText
-          x={PIN_W / 2} y={PIN_H - 98} textAnchor="middle" fontSize={24}
-          fontWeight="700" fill="rgba(255,255,255,0.65)" letterSpacing={8}
-        >
-          MISYKAT
-        </SvgText>
-      </Svg>
     );
   }
 
@@ -515,20 +360,6 @@ export default function MotivationScreen() {
           }
         />
       )}
-
-      {/* download preview overlay — the pin renders VISIBLY here, then
-          gets captured by react-native-view-shot */}
-      {svgItem ? (
-        <View style={s.dlOverlay}>
-          <View style={s.dlCard}>
-            {renderPinSvg(svgItem, PREVIEW_W, PREVIEW_H)}
-          </View>
-          <View style={s.dlStatus}>
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
-            <Text style={s.dlStatusText}>Menyimpan gambar…</Text>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -622,29 +453,4 @@ const s = StyleSheet.create({
     lineHeight: 20, paddingHorizontal: 48,
   },
   footer: { height: 120, justifyContent: 'center', alignItems: 'center' },
-  dlOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 100,
-    backgroundColor: 'rgba(0,0,0,0.88)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 18,
-  },
-  dlCard: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  dlStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  dlStatusText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    letterSpacing: 0.3,
-  },
 });
