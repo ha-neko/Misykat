@@ -4,21 +4,34 @@ import {
 } from 'react-native';
 
 function HoldArrow({ onStep, children, st }) {
-  const timer = useRef(null);
+  const delayTimer = useRef(null);
+  const repTimer = useRef(null);
   const onStepRef = useRef(onStep);
   useEffect(() => { onStepRef.current = onStep; }, [onStep]);
 
+  const stop = () => {
+    if (delayTimer.current) { clearTimeout(delayTimer.current); delayTimer.current = null; }
+    if (repTimer.current) { clearInterval(repTimer.current); repTimer.current = null; }
+  };
+
   const handlePressIn = () => {
+    stop();
+    // single step immediately — a quick tap steps exactly once
     onStepRef.current();
-    timer.current = setInterval(() => onStepRef.current(), 120);
+    // auto-repeat only after a short hold pause, at a moderate rate
+    delayTimer.current = setTimeout(() => {
+      delayTimer.current = null;
+      onStepRef.current();
+      repTimer.current = setInterval(() => onStepRef.current(), 150);
+    }, 400);
   };
 
   const handlePressOut = () => {
-    if (timer.current) { clearInterval(timer.current); timer.current = null; }
+    stop();
   };
 
   return (
-    <TouchableOpacity onPress={onStep} onPressIn={handlePressIn} onPressOut={handlePressOut} style={st.arrow}>
+    <TouchableOpacity onPressIn={handlePressIn} onPressOut={handlePressOut} style={st.arrow}>
       {children}
     </TouchableOpacity>
   );
