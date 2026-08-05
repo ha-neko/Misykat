@@ -201,19 +201,30 @@ export default function MotivationScreen() {
         })();
       });
 
-      // export the SVG to a JPEG data URL
+      // export the SVG to a JPEG data URL — with timeout + one retry
+      // (known react-native-svg quirk: callback may not fire on 1st call)
       const dataUrl = await new Promise((resolve, reject) => {
-        const node = svgRef.current;
-        if (!node || typeof node.toDataURL !== 'function') {
-          return reject(new Error('langkah 1: svg pin tidak tersedia'));
-        }
-        node.toDataURL(
-          d => {
-            if (typeof d === 'string' && d.length > 100) resolve(d);
-            else reject(new Error('langkah 2: hasil render kosong'));
-          },
-          { format: 'jpg', quality: 0.95 }
-        );
+        let attempts = 0;
+        const attempt = () => {
+          const node = svgRef.current;
+          if (!node || typeof node.toDataURL !== 'function') {
+            return reject(new Error('langkah 1: svg pin tidak tersedia'));
+          }
+          const timer = setTimeout(() => {
+            if (attempts < 1) { attempts++; attempt(); }
+            else reject(new Error('langkah 2: toDataURL timeout'));
+          }, 4000);
+          node.toDataURL(
+            d => {
+              clearTimeout(timer);
+              if (typeof d === 'string' && d.length > 100) resolve(d);
+              else if (attempts < 1) { attempts++; attempt(); }
+              else reject(new Error('langkah 3: hasil render kosong'));
+            },
+            { format: 'jpg', quality: 0.95 }
+          );
+        };
+        attempt();
       });
 
       // strip the data-url prefix and write to a file
@@ -222,7 +233,19 @@ export default function MotivationScreen() {
       const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.jpg`;
       await fs.writeAsStringAsync(fileUri, base64, { encoding: fs.EncodingType.Base64 });
 
-      await media.saveToLibraryAsync(fileUri);
+      // verify the file exists and is non-empty
+      const info = await fs.getInfoAsync(fileUri);
+      if (!info || !info.exists || info.size <= 0) throw new Error('langkah 4: file kosong');
+
+      // save to gallery — createAssetAsync is the most reliable on
+      // Android 10+ (write-only MediaStore contribution, no read
+      // permission needed, lands directly in gallery); fall back to
+      // saveToLibraryAsync only if it throws
+      try {
+        await media.createAssetAsync(fileUri);
+      } catch {
+        await media.saveToLibraryAsync(fileUri);
+      }
       Alert.alert('Tersimpan', 'Gambar quote tersimpan ke galeri');
     } catch (e) {
       Alert.alert(
