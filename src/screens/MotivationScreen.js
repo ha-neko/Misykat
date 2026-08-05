@@ -4,7 +4,7 @@ import {
   Dimensions, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Rect, Image as SvgImage, Text as SvgText, G } from 'react-native-svg';
+import Svg, { Rect, Text as SvgText, G, Defs, LinearGradient, RadialGradient, Stop } from 'react-native-svg';
 import { DownloadIcon, BookmarkIcon, BookmarkFillIcon } from '../components/Icons';
 import {
   getCategories, getCategoryLabel,
@@ -36,13 +36,9 @@ function simpleHash(str) {
   return Math.abs(hash);
 }
 
-function getWallpaperUrl(item, size) {
-  const base = item.id || 'umum';
-  if (size === 'dl') {
-    return `https://loremflickr.com/1080/1920/${THEME_KEYWORDS[item.cat] || THEME_KEYWORDS.umum}?lock=${simpleHash(base) % 999}`;
-  }
+function getWallpaperUrl(item) {
   const kw = THEME_KEYWORDS[item.cat] || THEME_KEYWORDS.umum;
-  const lock = simpleHash(base) % 999;
+  const lock = simpleHash(item.id || 'umum') % 999;
   return `https://loremflickr.com/${FULL_W}/${FULL_H}/${kw}?lock=${lock}`;
 }
 
@@ -66,6 +62,16 @@ function getQuoteStyle(text) {
 // ---- offscreen SVG quote-pin generator (download) ----
 const PIN_W = 1080;
 const PIN_H = 1620;
+
+// theme gradient per category — pure vector, so the export is a small PNG
+// (embedding the photo wallpaper in the SVG caused native OOM: Android's
+// toDataURL always exports PNG and ignores format/quality)
+const THEME_GRADIENTS = {
+  pekerjaan: { top: '#2b3a67', bottom: '#0d1226' },
+  keluarga: { top: '#6b2b3f', bottom: '#1c0d14' },
+  ibadah: { top: '#1f5c47', bottom: '#081a12' },
+  umum: { top: '#4a2b6b', bottom: '#160b24' },
+};
 
 function wrapText(text, charsPerLine) {
   const words = String(text || '').split(/\s+/).filter(Boolean);
@@ -96,7 +102,6 @@ export default function MotivationScreen() {
   const cats = getCategories();
   const listRef = useRef(null);
   const svgRef = useRef(null);
-  const svgImgReadyRef = useRef(false);
   const [svgItem, setSvgItem] = useState(null);
   const [items, setItems] = useState([]);
   const [favIds, setFavIdsState] = useState(new Set());
@@ -186,23 +191,23 @@ export default function MotivationScreen() {
         return;
       }
 
-      // mount the offscreen SVG pin
-      svgImgReadyRef.current = false;
+      // mount the offscreen SVG pin and wait for it to be in the tree
       setSvgItem(item);
-      await new Promise(r => setTimeout(r, 150));
-
-      // wait for the SVG background image to load (or timeout)
       await new Promise(resolve => {
         const t0 = Date.now();
         (function check() {
-          if (svgImgReadyRef.current) return resolve();
-          if (Date.now() - t0 > 8000) return resolve();
-          setTimeout(check, 100);
+          if (svgRef.current) return resolve();
+          if (Date.now() - t0 > 2000) return resolve();
+          setTimeout(check, 50);
         })();
       });
 
-      // export the SVG to a JPEG data URL — with timeout + one retry
-      // (known react-native-svg quirk: callback may not fire on 1st call)
+      // export the SVG to a data URL — with timeout + one retry
+      // (known react-native-svg quirk: callback may not fire on 1st call).
+      // NOTE: no options argument — Android's toDataURL only reads
+      // width/height from options and always exports PNG; passing
+      // {format, quality} makes native call options.getInt("width") on a
+      // missing key and crash.
       const dataUrl = await new Promise((resolve, reject) => {
         let attempts = 0;
         const attempt = () => {
@@ -220,8 +225,7 @@ export default function MotivationScreen() {
               if (typeof d === 'string' && d.length > 100) resolve(d);
               else if (attempts < 1) { attempts++; attempt(); }
               else reject(new Error('langkah 3: hasil render kosong'));
-            },
-            { format: 'jpg', quality: 0.95 }
+            }
           );
         };
         attempt();
@@ -230,7 +234,7 @@ export default function MotivationScreen() {
       // strip the data-url prefix and write to a file
       const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
       const fs = require('expo-file-system');
-      const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.jpg`;
+      const fileUri = fs.cacheDirectory + `misykat-${id}-${Date.now()}.png`;
       await fs.writeAsStringAsync(fileUri, base64, { encoding: fs.EncodingType.Base64 });
 
       // verify the file exists and is non-empty
@@ -253,6 +257,9 @@ export default function MotivationScreen() {
         'Tidak dapat menyimpan gambar' + (e && e.message ? `\n(${e.message})` : '')
       );
     } finally {
+      // unmount the offscreen SVG — keep it out of the live hierarchy so
+      // toDataURL never races the normal renderer (double-render crash)
+      setSvgItem(null);
       if (mounted.current) setDlPending(prev => ({ ...prev, [id]: false }));
     }
   }
@@ -339,25 +346,28 @@ export default function MotivationScreen() {
     const lines = wrapText(text, charsPerLine);
     const blockH = lines.length * lh;
     const blockStart = 600;
-    const imgUrl = imgFail[item.id] ? getFallbackWallpaperUrl(item) : getWallpaperUrl(item);
     const pillW = Math.max(100, sub.length * 26 + 70);
+    const g = THEME_GRADIENTS[item.cat] || THEME_GRADIENTS.umum;
 
     return (
       <Svg ref={svgRef} width={PIN_W} height={PIN_H}>
-        <SvgImage
-          href={{ uri: imgUrl }}
-          width={PIN_W}
-          height={PIN_H}
-          preserveAspectRatio="xMidYMidSlice"
-          onLoad={() => { svgImgReadyRef.current = true; }}
-          onError={() => { svgImgReadyRef.current = true; }}
-        />
-        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="rgba(0,0,0,0.45)" />
+        <Defs>
+          <LinearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={g.top} />
+            <Stop offset="1" stopColor={g.bottom} />
+          </LinearGradient>
+          <RadialGradient id="glow" cx="50%" cy="42%" r="62%">
+            <Stop offset="0" stopColor="rgba(255,255,255,0.10)" />
+            <Stop offset="1" stopColor="rgba(255,255,255,0)" />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="url(#bg)" />
+        <Rect x={0} y={0} width={PIN_W} height={PIN_H} fill="url(#glow)" />
         {sub ? (
           <G>
             <Rect
               x={(PIN_W - pillW) / 2} y={340} width={pillW} height={60} rx={30}
-              fill="rgba(0,0,0,0.45)" stroke="rgba(255,255,255,0.25)" strokeWidth={2}
+              fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.30)" strokeWidth={2}
             />
             <SvgText
               x={PIN_W / 2} y={380} textAnchor="middle" fontSize={28}
@@ -369,7 +379,7 @@ export default function MotivationScreen() {
         ) : null}
         <SvgText
           x={PIN_W / 2} y={470} textAnchor="middle" fontSize={120}
-          fontWeight="700" fill="rgba(255,255,255,0.25)"
+          fontWeight="700" fill="rgba(255,255,255,0.18)"
         >
           "
         </SvgText>
@@ -401,11 +411,11 @@ export default function MotivationScreen() {
         ) : null}
         <Rect
           x={(PIN_W - 240) / 2} y={PIN_H - 130} width={240} height={50} rx={25}
-          fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.15)" strokeWidth={2}
+          fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.20)" strokeWidth={2}
         />
         <SvgText
           x={PIN_W / 2} y={PIN_H - 98} textAnchor="middle" fontSize={24}
-          fontWeight="700" fill="rgba(255,255,255,0.6)" letterSpacing={8}
+          fontWeight="700" fill="rgba(255,255,255,0.65)" letterSpacing={8}
         >
           MISYKAT
         </SvgText>
